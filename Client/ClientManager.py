@@ -81,11 +81,11 @@ class ClientManager:
         while True:
             if not self._simple_queue.empty() and not self._exit:
                 data = self._simple_queue.get_nowait()
+                op += data
                 if not data.startswith(_op):
-                    op += data
                     continue
                 _data = ast.literal_eval(op.decode('utf-8'))
-                op = data
+                op = b''
                 if _data[0] == 'MOUSE':
                     self._controller.process_mouse(_data[1:])
                 elif _data[0] == 'KEYBOARD':
@@ -100,13 +100,16 @@ class ClientManager:
         while True:
             if not self._screen_queue.empty() and not self._exit:
                 data = self._screen_queue.get_nowait()
+                image += data
                 if not data.startswith(_image):
-                    image += data
                     continue
-                _data = ast.literal_eval(image.decode('utf-8'))
-                self._controller.process_screen(_data[1])
-                image = data
-                print('recieve')
+                if image.endswith(b')'):
+                    _data = ast.literal_eval(image.decode('utf-8'))
+                    self._controller.process_screen(_data[1])
+                    image = b''
+                    print('recieve')
+                else:
+                    print('hhh')
             else:
                 if self._exit:
                     break
@@ -147,6 +150,8 @@ class ClientManager:
             connection = self._control_connection
         elif _name == "screen":
             connection = self._screen_connection
+        elif _name == "simple":
+            connection = self._simple_connection
         if connection:
             connection.send(data)
 
@@ -228,8 +233,8 @@ if __name__ == '__main__':
     # getattr(y, '_simple_connection')
 
     y.login('1', '1')
-    y.listen()
-    # y.control('1')
+    # y.listen()
+    y.control('1')
     c = input()
     y.stop()
     sys.exit(0)

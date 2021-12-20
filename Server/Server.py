@@ -104,7 +104,6 @@ if __name__ == '__main__':
         port=8080,
         configuration=configuration,
         create_protocol=ServerProtocol,
-
     ))
     try:
         loop.run_forever()
