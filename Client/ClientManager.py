@@ -169,7 +169,8 @@ class ClientManager:
             ID = data['id']
             self.set_simple_connection(self.create_connection())
             self.set_screen_connection(self.create_connection())
-            self.send(self.LISTEN('1'), 'control')
+            self.send(self.LISTEN('1simple'), 'simple')
+            self.send(self.LISTEN('1screen'), 'screen')
             self.set_screen_listener()
             self._screen_connection.run()
             self._simple_connection.run()
@@ -182,7 +183,8 @@ class ClientManager:
     def control(self, ID: str) -> bool:
         self.set_simple_connection(self.create_connection())
         self.set_screen_connection(self.create_connection())
-        self.send(self.CONTROL(ID), 'control')
+        self.send(self.CONTROL('1simple'), 'simple')
+        self.send(self.CONTROL('1screen'), 'screen')
         self._mode = ClientMode.CONTROLLER
         self.set_keyboard_listener()
         self.set_mouse_listener()

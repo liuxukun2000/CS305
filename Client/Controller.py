@@ -18,6 +18,7 @@ RECORD_SECONDS = 0.5
 def printf(data: Text) -> None:
     os.write(1, bytes(data.encode('utf-8')))
 
+
 class Controller:
     def __init__(self) -> None:
         self._size = pyautogui.size()
