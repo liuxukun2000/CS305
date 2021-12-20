@@ -84,12 +84,12 @@ class ClientManager:
                 if not data.startswith(_op):
                     op += data
                     continue
-                data = ast.literal_eval(op.decode('utf-8'))
-                op = b''
-                if data[0] == 'MOUSE':
-                    self._controller.process_mouse(data[1:])
-                elif data[0] == 'KEYBOARD':
-                    self._controller.process_keyboard(*data[1:])
+                _data = ast.literal_eval(op.decode('utf-8'))
+                op = data
+                if _data[0] == 'MOUSE':
+                    self._controller.process_mouse(_data[1:])
+                elif _data[0] == 'KEYBOARD':
+                    self._controller.process_keyboard(*_data[1:])
             else:
                 if self._exit:
                     break
@@ -103,9 +103,9 @@ class ClientManager:
                 if not data.startswith(_image):
                     image += data
                     continue
-                data = ast.literal_eval(image.decode('utf-8'))
-                self._controller.process_screen(data[1])
-                image = b''
+                _data = ast.literal_eval(image.decode('utf-8'))
+                self._controller.process_screen(_data[1])
+                image = data
                 print('recieve')
             else:
                 if self._exit:
@@ -228,7 +228,8 @@ if __name__ == '__main__':
     # getattr(y, '_simple_connection')
 
     y.login('1', '1')
-    y.control('1')
+    y.listen()
+    # y.control('1')
     c = input()
     y.stop()
     sys.exit(0)
