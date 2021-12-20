@@ -32,9 +32,9 @@ class ServerProtocol(QuicConnectionProtocol):
         _ = self.__connection.pubsub()
         _.subscribe(self.__subscribe)
         for msg in _.listen():
-            print(msg)
+            # print(msg)
             if isinstance(msg['data'], bytes):
-                print('sent')
+                # print('sent')
                 self.sync_send(msg['data'])
 
     def connect_redis(self) -> None:

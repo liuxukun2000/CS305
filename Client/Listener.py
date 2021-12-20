@@ -126,7 +126,7 @@ class ScreenListener(threading.Thread):
             image = cv2.resize(image, (1280, 720))
             image = zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION)
             print(len(image))
-            self.client.send(struct.pack("L", len(image)) + image)
+            self.client.send(len(image).to_bytes(length=8, byteorder='big') + image)
 
     def stop(self):
         self.__stop = True
@@ -164,22 +164,36 @@ class AudioListener(threading.Thread):
 
 
 if __name__ == '__main__':
-    print(struct.calcsize("L"))
     image = cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR)
     image = cv2.resize(image, (1280, 720))
     image = zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION)
-    print(len(image))
-    with open('test', 'wb') as f:
-        f.write(b'SCREEN ' + image)
-    x = b''
-    with open('test', 'rb') as f:
-        x = f.read(len(image) + 7)
-    print(x[-10:])
+    print(len(image), struct.pack("L", len(image)))
+    # self.client.send(struct.pack("L", len(image)) + image)
+    print(struct.calcsize("L"))
+    ans = struct.pack("L", 130010)
+    print(ans, len(ans))
+    ans = ans + ans
+    ans = ans + ans
+    ans = ans + ans
 
-    x = b''
-    with open('test', 'rb') as f:
-        x = f.read()
-    print(x[-10:])
+    y = struct.unpack("L", ans[:8])
+    print(y, ans[:8])
+
+    # image = cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR)
+    # image = cv2.resize(image, (1280, 720))
+    # image = zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION)
+    # print(len(image))
+    # with open('test', 'wb') as f:
+    #     f.write(b'SCREEN ' + image)
+    # x = b''
+    # with open('test', 'rb') as f:
+    #     x = f.read(len(image) + 7)
+    # print(x[-10:])
+    #
+    # x = b''
+    # with open('test', 'rb') as f:
+    #     x = f.read()
+    # print(x[-10:])
    # time.sleep(3)
    # print('clic')
    # pyautogui.mouseDown(button='left')

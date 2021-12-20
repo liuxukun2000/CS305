@@ -97,20 +97,26 @@ class ClientManager:
 
     def receive_image(self):
         _size = struct.calcsize("L")
+        print("struct.calcsize", _size)
+        _size = 8
         data = b''
         data_size = 0
         _stage = 0
         while True:
             if not self._screen_queue.empty() and not self._exit:
+                # print(_stage)
                 if _stage == 0:
                     if len(data) < _size:
                         data += self._screen_queue.get_nowait()
                     else:
                         _stage = 1
-                        data_size = struct.unpack("L", data[: _size])[0]
+                        data_size = int.from_bytes(data[: _size], byteorder='big')
+                        print(data[: _size], data_size)
                         data = data[_size:]
+                        # print('--------->', data_size)
                         continue
                 else:
+                    # print(len(data))
                     if len(data) < data_size:
                         data += self._screen_queue.get_nowait()
                     else:
