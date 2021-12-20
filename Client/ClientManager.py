@@ -1,6 +1,7 @@
 import ast
 import os
 import pickle
+import struct
 import sys
 import time
 import zlib
@@ -76,13 +77,13 @@ class ClientManager:
         return self._mode
 
     def receive_simple(self):
-        _op = bytes("('".encode('utf-8'))
+        _op = bytes("')".encode('utf-8'))
         op = b''
         while True:
             if not self._simple_queue.empty() and not self._exit:
                 data = self._simple_queue.get_nowait()
                 op += data
-                if not data.startswith(_op):
+                if not data.endswith(_op):
                     continue
                 _data = ast.literal_eval(op.decode('utf-8'))
                 op = b''
@@ -95,27 +96,29 @@ class ClientManager:
                     break
 
     def receive_image(self):
-        _image = bytes("('SCREEN'".encode('utf-8'))
-        image = b''
+        _size = struct.calcsize("L")
+        data = b''
+        data_size = 0
+        _stage = 0
         while True:
             if not self._screen_queue.empty() and not self._exit:
-                data = self._screen_queue.get_nowait()
-                image += data
-                if not data.startswith(_image):
-                    continue
-                if image.endswith(b')'):
-                    _data = ast.literal_eval(image.decode('utf-8'))
-                    self._controller.process_screen(_data[1])
-                    image = b''
-                    print('recieve')
+                if _stage == 0:
+                    if len(data) < _size:
+                        data += self._screen_queue.get_nowait()
+                    else:
+                        _stage = 1
+                        data_size = struct.unpack("L", data[: _size])[0]
+                        data = data[_size:]
+                        continue
                 else:
-                    print('hhh')
-            else:
-                if self._exit:
-                    break
-                # else:
-                #     print('emp', self.queue.empty())
-                #     time.sleep(0.5)
+                    if len(data) < data_size:
+                        data += self._screen_queue.get_nowait()
+                    else:
+                        print('receive')
+                        self._controller.process_screen(data[: data_size])
+                        data = data[data_size:]
+                        _stage = 0
+
 
     @staticmethod
     def create_connection() -> Client:

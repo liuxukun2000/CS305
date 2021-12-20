@@ -73,12 +73,12 @@ class ServerProtocol(QuicConnectionProtocol):
 
     def quic_event_received(self, event: QuicEvent):
         if isinstance(event, StreamDataReceived):
-            print(event)
+            # print(event)
             if not self.ready:
                 self.init(event.data)
             else:
                 self.__connection.publish(self.__publish, event.data)
-                print('pub', event.data)
+                # print('pub', event.data)
         if isinstance(event, ConnectionTerminated):
             self.close_connection()
             print(event)

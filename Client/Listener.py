@@ -2,7 +2,7 @@ import pickle
 import struct
 import time
 from typing import List, Tuple, Dict
-
+import struct
 import pyaudio
 from PIL import ImageGrab
 from cv2 import cv2
@@ -125,7 +125,8 @@ class ScreenListener(threading.Thread):
             image = cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR)
             image = cv2.resize(image, (1280, 720))
             image = zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION)
-            self.client.send(str(("SCREEN", image)))
+            print(len(image))
+            self.client.send(struct.pack("L", len(image)) + image)
 
     def stop(self):
         self.__stop = True
@@ -163,10 +164,26 @@ class AudioListener(threading.Thread):
 
 
 if __name__ == '__main__':
-   time.sleep(3)
-   print('clic')
-   pyautogui.mouseDown(button='left')
-   print('clic')
-   pyautogui.mouseUp(button='left')
-   time.sleep(3)
-   mouse.wheel(-10)
+    print(struct.calcsize("L"))
+    image = cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR)
+    image = cv2.resize(image, (1280, 720))
+    image = zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION)
+    print(len(image))
+    with open('test', 'wb') as f:
+        f.write(b'SCREEN ' + image)
+    x = b''
+    with open('test', 'rb') as f:
+        x = f.read(len(image) + 7)
+    print(x[-10:])
+
+    x = b''
+    with open('test', 'rb') as f:
+        x = f.read()
+    print(x[-10:])
+   # time.sleep(3)
+   # print('clic')
+   # pyautogui.mouseDown(button='left')
+   # print('clic')
+   # pyautogui.mouseUp(button='left')
+   # time.sleep(3)
+   # mouse.wheel(-10)
