@@ -3,23 +3,49 @@ import os
 import pickle
 import struct
 import sys
+import threading
 import time
 import zlib
-from asyncio import Queue
+from multiprocessing import Process, Queue
+# from asyncio import Queue
 from enum import Enum, unique
-from typing import Union, ByteString, Text
-from threading import Thread
-from Protocol import ClientProtocol
-from Protocol import Client
-from Controller import Controller
+from typing import Union, ByteString, Text, Tuple, Dict, Callable, Any
 import requests
-from Listener import MouseListener, KeyboardListener, ScreenListener, AudioListener
+from utils import *
 
 URL = "http://oj.sustech.xyz:8000"
 
 
+@unique
+class ReceiveEvent(Enum):
+    DisplayReady = 'display-ready'
+    UserLogin = 'user-login'
+    ChangeName = 'change-name'
+    NetworkDelay = 'network-delay'
+    DisplayName = 'display-name'
+    UserLogout = 'user-logout'
+    ChangePassword = 'change-password'
+
+
+@unique
+class SendEvent(Enum):
+    ClientReady = 'client-ready'
+    ClientMessage = 'client-message'
+    NetworkDelay = 'network-delay'
+    DisplayName = 'display-name'
+    Okay = 'okay'
+    Failed = 'failed'
+
+
 def printf(data: Text) -> None:
     os.write(1, bytes(data.encode('utf-8')))
+    # os.write(2, bytes(data.encode('utf-8')))
+
+
+def scanf() -> Tuple[ReceiveEvent, Any]:
+    data = os.read(0, 4096).decode('utf-8').strip().split('||||')
+    os.write(2, bytes(str(data).encode('utf-8')))
+    return ReceiveEvent(data[0]), data[1:]
 
 
 @unique
@@ -32,41 +58,45 @@ class ClientMode(Enum):
     MEETING = 5
 
 
+def get_message(event: SendEvent, msg: Any) -> str:
+    return '||||'.join((event.value, *msg))
+
+
 class ClientManager:
     def __init__(self) -> None:
-        self._mouse_listener: Union[MouseListener, None] = None
-        self._keyboard_listener: Union[KeyboardListener, None] = None
-        self._screen_listener: Union[ScreenListener, None] = None
-        self._audio_listener: Union[AudioListener, None] = None
+        self.__event = Event()
+        self.__simple_manager: Union[SimpleManager, None] = None
+        self.__screen_manager: Union[ScreenManager, None] = None
+        self.__simple_receiver: Union[SimpleReceiver, None] = None
+        self.__screen_receiver: Union[ScreenReceiver, None] = None
+
         self._mode: ClientMode = ClientMode.INIT
         self._session = requests.Session()
 
-        self._simple_connection: Union[Client, None] = None
-        self._screen_connection: Union[Client, None] = None
-        self._voice_connection: Union[Client, None] = None
         self._control_connection: Client = Client()
-
-        self._simple_queue: [Queue, None] = None
-        self._screen_queue: [Queue, None] = None
-        self._voice_queue: [Queue, None] = None
         self._control_queue: Queue = self._control_connection.queue
-
         self._control_connection.run()
 
-        self._exit = False
-        self._simple_receive_thread = None
-        self._screen_receive_thread = None
-        self._voice_receive_thread = None
-        self._control_receive_thread = None
-        self._controller = Controller()
+        self.__simple_process: Union[Process, None] = None
+        self.__screen_process: Union[Process, None] = None
 
-    @staticmethod
-    def LISTEN(ID: str) -> str:
-        return str(("LISTEN", ID))
+        self.__username: str = ""
+        self.__token: str = ""
 
-    @staticmethod
-    def CONTROL(ID: str) -> str:
-        return str(("CONTROL", ID))
+    def delay(self) -> int:
+        printf(get_message(SendEvent.NetworkDelay, (str(self._control_connection.delay),)))
+        return self._control_connection.delay
+
+    def display_name(self):
+        printf(get_message(SendEvent.DisplayName, (self.__username)))
+        return self.__username
+
+    def logout(self):
+        printf(get_message(SendEvent.Okay, ()))
+        self._mode = ClientMode.INIT
+
+    def connected(self) -> None:
+        printf(get_message(SendEvent.ClientReady, ()))
 
     @staticmethod
     def _url(_url: str) -> str:
@@ -76,69 +106,39 @@ class ClientManager:
     def mode(self) -> ClientMode:
         return self._mode
 
-    def receive_simple(self):
-        _op = bytes("')".encode('utf-8'))
-        op = b''
-        while True:
-            if not self._simple_queue.empty() and not self._exit:
-                data = self._simple_queue.get_nowait()
-                op += data
-                if not data.endswith(_op):
-                    continue
-                _data = ast.literal_eval(op.decode('utf-8'))
-                op = b''
-                if _data[0] == 'MOUSE':
-                    self._controller.process_mouse(_data[1:])
-                elif _data[0] == 'KEYBOARD':
-                    self._controller.process_keyboard(*_data[1:])
-            else:
-                if self._exit:
-                    break
-
-    def receive_image(self):
-        _size = struct.calcsize("L")
-        print("struct.calcsize", _size)
-        _size = 8
-        data = b''
-        data_size = 0
-        _stage = 0
-        while True:
-            if not self._screen_queue.empty() and not self._exit:
-                # print(_stage)
-                if _stage == 0:
-                    if len(data) < _size:
-                        data += self._screen_queue.get_nowait()
-                    else:
-                        _stage = 1
-                        data_size = int.from_bytes(data[: _size], byteorder='big')
-                        print(data[: _size], data_size)
-                        data = data[_size:]
-                        # print('--------->', data_size)
-                        continue
-                else:
-                    # print(len(data))
-                    if len(data) < data_size:
-                        data += self._screen_queue.get_nowait()
-                    else:
-                        print('receive')
-                        self._controller.process_screen(data[: data_size])
-                        data = data[data_size:]
-                        _stage = 0
-
-
     @staticmethod
     def create_connection() -> Client:
         return Client()
 
-    def set_simple_connection(self, connection: Client) -> None:
-        self._simple_connection = connection
-        self._simple_queue = connection.queue
+    def change_name(self, username) -> None:
+        data = dict(
+            newname=username
+        )
+        try:
+            response = self._session.post(url=self._url('/changename/'), data=data)
+            data = response.json()
+            if data.get('status', 500) != 200:
+                printf(get_message(SendEvent.Failed, ()))
+            self.__username = username
 
-    def set_screen_connection(self, connection: Client) -> None:
-        self._screen_connection = connection
-        self._screen_queue = connection.queue
+            printf(get_message(SendEvent.Okay, ()))
+        except Exception:
+            printf(get_message(SendEvent.Failed, ()))
 
-    def login(self, username: str, password: str) -> bool:
+    def change_password(self, password: str) -> None:
+        data = dict(
+            password=password
+        )
+        try:
+            response = self._session.post(url=self._url('/changepwd/'), data=data)
+            data = response.json()
+            if data.get('status', 500) != 200:
+                printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Okay, ()))
+        except Exception:
+            printf(get_message(SendEvent.Failed, ()))
+
+    def login(self, username: str, password: str) -> None:
         data = dict(
             username=username,
             password=password
@@ -147,32 +147,13 @@ class ClientManager:
             response = self._session.post(url=self._url('/login/'), data=data)
             data = response.json()
             if data.get('status', 500) != 200:
-                return False
+                printf(get_message(SendEvent.Failed, ()))
             self._mode = ClientMode.LOGIN
-            return True
+            self.__username = username
+            self.__token = data['token']
+            printf(get_message(SendEvent.Okay, ()))
         except Exception:
-            return False
-
-    def send(self, data: Union[str, ByteString], _name: str) -> None:
-        connection = None
-        if _name == "control":
-            connection = self._control_connection
-        elif _name == "screen":
-            connection = self._screen_connection
-        elif _name == "simple":
-            connection = self._simple_connection
-        if connection:
-            connection.send(data)
-
-    def start_receive_simple(self) -> None:
-        self._simple_receive_thread = Thread(target=self.receive_simple)
-        self._simple_receive_thread.setDaemon(True)
-        self._simple_receive_thread.start()
-
-    def start_receive_screen(self) -> None:
-        self._screen_receive_thread = Thread(target=self.receive_image)
-        self._screen_receive_thread.setDaemon(True)
-        self._screen_receive_thread.start()
+            printf(get_message(SendEvent.Failed, ()))
 
     def listen(self) -> str:
         try:
@@ -181,72 +162,76 @@ class ClientManager:
             if data.get('status', 500) != 200:
                 return ""
             ID = data['id']
-            self.set_simple_connection(self.create_connection())
-            self.set_screen_connection(self.create_connection())
-            self.send(self.LISTEN('1simple'), 'simple')
-            self.send(self.LISTEN('1screen'), 'screen')
-            self.set_screen_listener()
-            self._screen_connection.run()
-            self._simple_connection.run()
-            self._mode = ClientMode.LISTENER
-            self.start_receive_simple()
+            ID = '1'
+            # listener 需要发送screen,接收simple
+            self.__screen_manager = ScreenManager(ID, self.__event)
+            self.__screen_manager.init_msg = LISTEN(f"{ID}_screen")
+            self.__screen_process = get_process(self.__screen_manager)
+            self.__screen_process.start()
+
+            # self.__simple_receiver = SimpleReceiver(ID, self.__event)
+            # self.__simple_receiver.init(LISTEN(f"{ID}_simple"))
+            # self.__simple_process = get_process(self.__simple_receiver)
+            # self.__simple_process.start()
             return ID
         except Exception:
             return ""
 
     def control(self, ID: str) -> bool:
-        self.set_simple_connection(self.create_connection())
-        self.set_screen_connection(self.create_connection())
-        self.send(self.CONTROL('1simple'), 'simple')
-        self.send(self.CONTROL('1screen'), 'screen')
-        self._mode = ClientMode.CONTROLLER
-        self.set_keyboard_listener()
-        self.set_mouse_listener()
-        self._simple_connection.run()
-        self._screen_connection.run()
-        self.start_receive_screen()
+        self.__screen_receiver = ScreenReceiver(ID, self.__event)
+        self.__screen_receiver.init_msg = CONTROL(f"{ID}_screen")
+        self.__screen_process = get_process(self.__screen_receiver)
+        self.__screen_process.start()
+
+        # self.__simple_manager = SimpleManager(ID, self.__event)
+        # self.__simple_manager.init(CONTROL(f"{ID}_simple"))
+        # self.__simple_process = get_process(self.__simple_manager)
+        # self.__simple_process.start()
         return True
 
-    def set_keyboard_listener(self) -> None:
-        self._keyboard_listener = KeyboardListener(self._simple_connection)
-        self._keyboard_listener.setDaemon(True)
-        self._keyboard_listener.start()
-
-    def set_mouse_listener(self) -> None:
-        self._mouse_listener = MouseListener(self._simple_connection)
-        self._mouse_listener.setDaemon(True)
-        self._mouse_listener.start()
-
-    def set_screen_listener(self) -> None:
-        self._screen_listener = ScreenListener(self._screen_connection)
-        self._screen_listener.setDaemon(True)
-        self._screen_listener.start()
-
     def stop(self):
-        if self._mouse_listener:
-            self._mouse_listener.stop()
-        if self._screen_listener:
-            self._mouse_listener.stop()
-        if self._keyboard_listener:
-            self._keyboard_listener.stop()
-        # if self._recive_thread:
-        #     self._recive_thread._stop()
-        # self._screen_listener.stop()
+        self.__event.set()
 
 
 if __name__ == '__main__':
-    # op = input()
-    # printf('client-ready')
-    # op = input()
-    y = ClientManager()
-    # getattr(y, '_simple_connection')
+    manager = ClientManager()
+    FUNCTIONHASH: Dict[ReceiveEvent, Callable] = {
+        ReceiveEvent.DisplayReady: manager.connected,
+        ReceiveEvent.DisplayName: manager.display_name,
+        ReceiveEvent.NetworkDelay: manager.delay,
+        ReceiveEvent.UserLogout: manager.logout,
+        ReceiveEvent.UserLogin: manager.login,
+        ReceiveEvent.ChangeName: manager.change_name,
+        ReceiveEvent.ChangePassword: manager.change_password
+    }
+    while True:
+        event, data = scanf()
+        # os.write(2, b'rec')
+        FUNCTIONHASH[event](*data)
+        # os.write(2, b'done')
 
-    y.login('1', '1')
-    # y.listen()
-    y.control('1')
-    c = input()
-    y.stop()
-    sys.exit(0)
-
+    #
+    #
+    #
+    # # op = input()
+    # # printf('client-ready')
+    # # op = input()
+    # y = ClientManager()
+    # x = ClientManager()
+    # # getattr(y, '_simple_connection')
+    #
+    # y.login('1', '1')
+    # x.login('1', '1')
+    # y.control('1')
+    #
+    # x.listen()
+    #
+    # print('inp')
+    # c = input()
+    # print('stop')
     # x.stop()
-    # print('1111111111111111111111')
+    # y.stop()
+    # sys.exit(0)
+    #
+    # # x.stop()
+    # # print('1111111111111111111111')

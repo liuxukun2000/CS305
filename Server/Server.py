@@ -1,7 +1,8 @@
 import ast
 import asyncio
 import threading
-from typing import Union, ByteString, Sequence
+import time
+from typing import Union, ByteString, Sequence, Dict, List
 from aioquic.asyncio import *
 from aioquic.quic.events import QuicEvent, StreamDataReceived, ConnectionTerminated
 import redis
@@ -26,6 +27,8 @@ class ServerProtocol(QuicConnectionProtocol):
         self.__publish: str = None
         self.__subscribe: str = None
         self.ready = False
+        self._cache: List[bytes] = [b'' for i in range(256)]
+        self._xtime = dict()
         super().__init__(*args, **kwargs)
 
     def transport(self) -> None:
@@ -35,7 +38,9 @@ class ServerProtocol(QuicConnectionProtocol):
             # print(msg)
             if isinstance(msg['data'], bytes):
                 # print('sent')
+                # start = time.time()
                 self.sync_send(msg['data'])
+                # print(time.time() - start)
 
     def connect_redis(self) -> None:
         self.__connection = redis.StrictRedis(host='127.0.0.1', port=6379, db=0)
@@ -73,12 +78,31 @@ class ServerProtocol(QuicConnectionProtocol):
 
     def quic_event_received(self, event: QuicEvent):
         if isinstance(event, StreamDataReceived):
-            # print(event)
+            # print(event.data)
             if not self.ready:
                 self.init(event.data)
             else:
-                self.__connection.publish(self.__publish, event.data)
-                # print('pub', event.data)
+                _id = event.stream_id % 256
+                if not event.end_stream:
+                    self._cache[_id] += event.data
+                else:
+                    self.__connection.publish(self.__publish, self._cache[_id] + event.data)
+                    self._cache[_id] = b''
+
+                # if not event.end_stream:
+                #     if event.stream_id in self._cache:
+                #         self._cache[event.stream_id] += event.data
+                #     else:
+                #         self._xtime[event.stream_id] = time.time()
+                #         self._cache[event.stream_id] = event.data
+                #     # print(event.stream_id, event.end_stream)
+                # else:
+                #     if event.stream_id in self._cache:
+                #         print('send', event.stream_id, time.time() - self._xtime[event.stream_id])
+                #         self.__connection.publish(self.__publish, self._cache.pop(event.stream_id) + event.data)
+                #     else:
+                #         self.__connection.publish(self.__publish, event.data)
+
         if isinstance(event, ConnectionTerminated):
             self.close_connection()
             print(event)
@@ -90,14 +114,14 @@ class ServerProtocol(QuicConnectionProtocol):
         stream_id = self._quic.get_next_available_stream_id()
         self._quic.send_stream_data(stream_id,
                                     bytes(data.encode('utf-8') if isinstance(data, str) else data),
-                                    False)
+                                    True)
         self.transmit()
         await asyncio.sleep(0.0001)
+
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     configuration = ServerConfig()
-
 
     x = loop.run_until_complete(serve(
         host="0.0.0.0",

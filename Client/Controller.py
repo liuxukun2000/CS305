@@ -29,6 +29,7 @@ class Controller:
                                                 output=True,
                                                 frames_per_buffer=CHUNK
                                                 )
+        self.f = open('test', 'rb+')
 
     @staticmethod
     def process_keyboard(key: int, down: bool) -> None:
@@ -44,8 +45,9 @@ class Controller:
 
     def process_screen(self, data: bytes):
         print(len(data))
-        # image = pickle.loads(data)
-        # image = zlib.decompress(image)
+        image = zlib.decompress(data)
+        image = pickle.loads(image)
+        self.f.write(image)
         # print('screen-image', image)
         # printf(f'screen-image||||{image.toBytes()}')
 

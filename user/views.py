@@ -13,11 +13,33 @@ def login(request: HttpRequest) -> JsonResponse:
     password = request.POST.get('password', '')
     if not all((username, password)):
         return JsonResponse(dict(status=400))
-    if User.objects.filter(username=username, password=password).exists():
+    users = User.objects.filter(username=username, password=password)
+    if users:
         request.session['is_login'] = True
-        return JsonResponse(dict(status=200))
+        request.session['username'] = username
+        return JsonResponse(dict(status=200, token=users[0].token))
     return JsonResponse(dict(status=404))
 
+def change_name(request: HttpRequest):
+    if request.session.get('is_login'):
+        username = request.session['username']
+        newname = request.POST.get('newname', '')
+        if not all((username, newname)):
+            return JsonResponse(dict(status=400))
+        if User.objects.filter(username=newname).exists():
+            return JsonResponse(dict(status=401))
+        User.objects.filter(username=username).update(username=newname)
+        return JsonResponse(dict(status=200))
+    return JsonResponse(dict(status=403))
+
+def change_password(request: HttpRequest):
+    if request.session.get('is_login'):
+        password = request.POST.get('password', '')
+        if not all((password,)):
+            return JsonResponse(dict(status=400))
+        User.objects.filter(username=request.session['username']).update(password=password)
+        return JsonResponse(dict(status=200))
+    return JsonResponse(dict(status=403))
 
 def listen(request: HttpRequest):
     if request.session.get('is_login'):

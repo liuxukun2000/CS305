@@ -1,5 +1,6 @@
 import pickle
 import struct
+from multiprocessing import Process
 import time
 from typing import List, Tuple, Dict
 import struct
@@ -25,7 +26,7 @@ RATE = 44100
 RECORD_SECONDS = 0.5
 
 
-class MouseListener(threading.Thread):
+class MouseListener:
     def __init__(self, client: Client, interval: float = 0.05) -> None:
         assert 0.001 <= interval <= 1, "0.001 <= interval <= 1"
         self._status: Dict[str, str] = dict(
@@ -37,7 +38,6 @@ class MouseListener(threading.Thread):
         self.interval: float = interval
         self._last_record: float = time.time()
         self.client = client
-        super().__init__()
 
     def on_click(self, e: ButtonEvent) -> None:
         if self._status[e.button] == e.event_type:
@@ -69,16 +69,16 @@ class MouseListener(threading.Thread):
     def start(self):
         mouse.hook(self.global_hook)
 
-    def stop(self):
+    @staticmethod
+    def stop():
         mouse.unhook_all()
-        self._stop()
 
 
-class KeyboardListener(threading.Thread):
+class KeyboardListener:
     def __init__(self, client: Client) -> None:
         self.client = client
         self.statues: List[bool] = [False for i in range(300)]
-        super().__init__()
+
 
     def global_hook(self, key: KeyboardEvent) -> None:
         return self.on_press(key) if key.event_type == 'down' else self.on_release(key)
@@ -98,18 +98,16 @@ class KeyboardListener(threading.Thread):
         self.statues[key.scan_code] = False
         self.client.send(str(("KEYBOARD", key.scan_code, False)))
 
-    def run(self):
+    def start(self):
         keyboard.unhook_all()
         keyboard.block_key(272)
         keyboard.block_key(273)
         keyboard.block_key(274)
         keyboard.hook(self.global_hook)
-        keyboard.wait(hotkey='ctrl+q')
-        print('key')
 
-    def stop(self):
+    @staticmethod
+    def stop():
         keyboard.unhook_all()
-        self._stop()
 
 
 class ScreenListener(threading.Thread):
@@ -119,19 +117,27 @@ class ScreenListener(threading.Thread):
         super().__init__()
 
     def run(self):
+        print(self.client)
+        start = time.time()
+        num = 0
         while not self.__stop:
-            time.sleep(3)
-            # self.client.send(str(("SCREEN", '1')))
+            # time.sleep(0.05)
+            #
+            num += 1
             image = cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR)
-            image = cv2.resize(image, (1280, 720))
+            image = cv2.resize(image, (640, 360))
             image = zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION)
-            print(len(image))
-            self.client.send(len(image).to_bytes(length=8, byteorder='big') + image)
+            self.client.send(image)
+            if num == 100:
+                break
+            print('send', time.time() - start)
+            # return
+        print('<-----', time.time() - start)
 
     def stop(self):
         self.__stop = True
         time.sleep(0.3)
-        self._stop()
+        self.close()
 
 
 class AudioListener(threading.Thread):
@@ -163,11 +169,13 @@ class AudioListener(threading.Thread):
         self._stop()
 
 
+
 if __name__ == '__main__':
     image = cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR)
-    image = cv2.resize(image, (1280, 720))
+    image = cv2.resize(image, (640, 360))
     image = zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION)
     print(len(image), struct.pack("L", len(image)))
+
     # self.client.send(struct.pack("L", len(image)) + image)
     print(struct.calcsize("L"))
     ans = struct.pack("L", 130010)

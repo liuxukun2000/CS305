@@ -1,8 +1,9 @@
 import asyncio
-from asyncio.queues import Queue
+import time
+from multiprocessing import Queue
 import socket
 import sys
-from typing import cast, Optional, Callable, Union
+from typing import cast, Optional, Callable, Union, Dict, List
 from aioquic.asyncio import connect, QuicConnectionProtocol
 from aioquic.asyncio.protocol import QuicStreamHandler
 from aioquic.quic.configuration import QuicConfiguration
@@ -26,6 +27,7 @@ class ClientProtocol(QuicConnectionProtocol):
     def __init__(self, *args, **kwargs):
         self._connect = False
         self.__queue = None
+        self._cache: List[bytes] = [b'' for i in range(256)]
         super(ClientProtocol, self).__init__(*args, **kwargs)
 
     @property
@@ -41,22 +43,25 @@ class ClientProtocol(QuicConnectionProtocol):
 
     async def send(self, data: str) -> None:
         stream_id = self._quic.get_next_available_stream_id()
-        self._quic.send_stream_data(stream_id, bytes(data.encode('utf-8')) if isinstance(data, str) else data, False)
+        self._quic.send_stream_data(stream_id, bytes(data.encode('utf-8')) if isinstance(data, str) else data, True)
         self.transmit()
         await asyncio.sleep(0.0001)
 
+    @property
+    def connected(self) -> bool:
+        return self._connect
+
     def quic_event_received(self, event: QuicEvent):
         if isinstance(event, StreamDataReceived):
-            # print(event.data)
-            if self.__queue and not self.__queue.full():
-                self.__queue.put_nowait(event.data)
-                # print('queue-> ', event.data)
+            _id = event.stream_id % 256
+            if not event.end_stream:
+                self._cache[_id] += event.data
             else:
-                pass
-                # print('<------', print(event.data))
+                if self.__queue:
+                    self.__queue.put_nowait(self._cache[_id] + event.data)
+                self._cache[_id] = b''
         if isinstance(event, ConnectionTerminated):
-            # print('closed')
-            print(event)
+            self._connect = False
 
 
 class Client:
@@ -70,6 +75,8 @@ class Client:
                 create_protocol=ClientProtocol
             )
         ))
+        self.__host = host
+        self.__port = port
         self._signal = None
         self.size = 0
         self.t = threading.Thread(target=start_loop, args=(self.loop,))
@@ -77,6 +84,12 @@ class Client:
         self.t.start()
         self.queue = Queue(maxsize=128)
         self._connect.set_queue(self.queue)
+        self.__ping = True
+        self.__delay = 0
+
+    @property
+    def delay(self) -> int:
+        return self.__delay
 
     @staticmethod
     async def connect(host: str,
@@ -136,14 +149,31 @@ class Client:
             print(e)
 
     async def ping(self):
-        while True:
+        while self.__ping:
+            start = time.time_ns()
             await self._connect.ping()
+            self.__delay = round((time.time_ns() - start) / 1000000, 2)
             await asyncio.sleep(1)
 
     def run(self):
+        self.__ping = True
         asyncio.run_coroutine_threadsafe(self.ping(), self.loop)
 
-        # self.t.join()
+    @property
+    def connected(self) -> bool:
+        return self._connect.connected
+
+    def reconnect(self) -> None:
+        self.__ping = False
+        time.sleep(2)
+        self._connect = cast(ClientProtocol, self.loop.run_until_complete(
+            self.connect(
+                host=self.__host,
+                port=self.__port,
+                configuration=ClientConfig(),
+                create_protocol=ClientProtocol
+            )
+        ))
 
 
 if __name__ == '__main__':
