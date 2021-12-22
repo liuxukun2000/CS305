@@ -59,6 +59,9 @@ class ServerProtocol(QuicConnectionProtocol):
         elif args[0] == "CONTROL":
             self.set_subscribe(f"{args[1]}_l")
             self.set_publish(f"{args[1]}_c")
+        elif args[0] == "control":
+            self.set_subscribe(f"{args[1]}")
+            self.set_publish(f"{args[1]}")
         else:
             return
         self.connect_redis()

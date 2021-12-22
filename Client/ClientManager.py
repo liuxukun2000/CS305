@@ -15,6 +15,8 @@ from utils import *
 
 URL = "http://oj.sustech.xyz:8000"
 
+def debug(x: str):
+    os.write(2, bytes(x.encode('utf-8')))
 
 @unique
 class ReceiveEvent(Enum):
@@ -88,9 +90,11 @@ class ClientManager:
 
         self.__simple_process: Union[Process, None] = None
         self.__screen_process: Union[Process, None] = None
-        self.__control_thread: Union[Thread, None] = Thread(target=self.control_AST)
+        self.__control_thread: Union[Thread, None] = Thread(target=self.control_FSA)
         self.__control_thread.setDaemon(True)
         self.__control_thread.start()
+
+        self.__self = str(time.time_ns())
 
 
         self.__username: str = ""
@@ -200,20 +204,22 @@ class ClientManager:
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
 
-    def control_AST(self):
+    def control_FSA(self):
         """
         CONTROL : START/STOP : DO/DONE : token
         :return:
         """
+        debug('start control-----------------')
         while not self.__control_event.is_set():
             if self._control_connection.queue.empty():
+                debug('queue empty-----------------')
                 time.sleep(1)
                 continue
             op: bytes = self._control_connection.queue.get()
             op = ast.literal_eval(op.decode('utf-8'))
-
+            debug('control receive-----------------' + str(op))
             if op[0] == 'CONTROL':
-                if self.__token != op[3]:
+                if self.__token != op[3] or op[4] == self.__self:
                     continue
                 if op[1] == 'START':
                     if op[2] == 'DO':
@@ -223,7 +229,7 @@ class ClientManager:
                         self.__screen_manager.init_msg = LISTEN(f"{self.__token}_screen")
                         self.__screen_process = get_process(self.__screen_manager)
                         self.__screen_process.start()
-                        self._control_connection.send(str(('CONTROL', 'START', 'DONE', self.__token)))
+                        self._control_connection.send(str(('CONTROL', 'START', 'DONE', self.__token, self.__self)))
                         self._mode = ClientMode.LISTENER
                     else:
                         if self.__screen_process:
@@ -252,6 +258,7 @@ class ClientManager:
             # ID = data['id']
             # ID = '1'
             # self._control_connection.send(str(('CONTROL', 'START', 'DO', self.__token)))
+            self._control_connection.send(str(('control', self.__token)))
             printf(get_message(SendEvent.Okay, ()))
             # listener 需要发送screen,接收simple
             # self.__screen_manager = ScreenManager(ID, self.__event)
@@ -273,7 +280,9 @@ class ClientManager:
         # self.__screen_process = get_process(self.__screen_receiver)
         # self.__screen_process.start()
         self.__token = ID
-        self._control_connection.send(str(('CONTROL', 'START', 'DO', self.__token)))
+        self._control_connection.send(str(('control', self.__token)))
+        time.sleep(0.5)
+        self._control_connection.send(str(('CONTROL', 'START', 'DO', self.__token, self.__self)))
         for i in range(3):
             time.sleep(i + 0.1)
             if self._mode == ClientMode.CONTROLLER:
@@ -289,7 +298,7 @@ class ClientManager:
         return True
 
     def stop_control_listen(self):
-        self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token)))
+        self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
 
     def stop(self):
         self.__event.set()
