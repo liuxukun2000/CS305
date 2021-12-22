@@ -19,7 +19,9 @@ from user.views import *
 
 urlpatterns = [
     path('login/', login),
+    path('register/', register),
     path('changename/', change_name),
     path('changepwd/', change_password),
     path('listen/', listen),
+    path('changetoken/', change_token),
 ]

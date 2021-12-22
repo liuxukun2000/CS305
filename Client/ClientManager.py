@@ -20,11 +20,19 @@ URL = "http://oj.sustech.xyz:8000"
 class ReceiveEvent(Enum):
     DisplayReady = 'display-ready'
     UserLogin = 'user-login'
+    UserRegister = 'user-register'
+
+    GetCode = 'get-code'
     ChangeName = 'change-name'
     NetworkDelay = 'network-delay'
     DisplayName = 'display-name'
     UserLogout = 'user-logout'
     ChangePassword = 'change-password'
+    RefreshCode = 'refresh-code'
+
+    EnableSlave = 'enable-slave'
+    DisableSlave = 'disable-slave'
+    RemoteControl = 'remote-control'
 
 
 @unique
@@ -76,9 +84,14 @@ class ClientManager:
         self._control_connection: Client = Client()
         self._control_queue: Queue = self._control_connection.queue
         self._control_connection.run()
+        self.__control_event: Event = Event()
 
         self.__simple_process: Union[Process, None] = None
         self.__screen_process: Union[Process, None] = None
+        self.__control_thread: Union[Thread, None] = Thread(target=self.control_AST)
+        self.__control_thread.setDaemon(True)
+        self.__control_thread.start()
+
 
         self.__username: str = ""
         self.__token: str = ""
@@ -97,6 +110,9 @@ class ClientManager:
 
     def connected(self) -> None:
         printf(get_message(SendEvent.ClientReady, ()))
+
+    def token(self) -> None:
+        printf(get_message(SendEvent.Okay, (self.__token)))
 
     @staticmethod
     def _url(_url: str) -> str:
@@ -138,6 +154,23 @@ class ClientManager:
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
 
+    def register(self, username: str, password: str) -> None:
+        data = dict(
+            username=username,
+            password=password
+        )
+        try:
+            response = self._session.post(url=self._url('/register/'), data=data)
+            data = response.json()
+            if data.get('status', 500) != 200:
+                printf(get_message(SendEvent.Failed, ()))
+            self._mode = ClientMode.LOGIN
+            self.__username = username
+            self.__token = data['token']
+            printf(get_message(SendEvent.Okay, ()))
+        except Exception:
+            printf(get_message(SendEvent.Failed, ()))
+
     def login(self, username: str, password: str) -> None:
         data = dict(
             username=username,
@@ -155,39 +188,108 @@ class ClientManager:
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
 
-    def listen(self) -> str:
+    def change_token(self) -> None:
         try:
-            response = self._session.post(url=self._url('/listen/'))
+            response = self._session.post(url=self._url('/changetoken/'))
             data = response.json()
             if data.get('status', 500) != 200:
-                return ""
-            ID = data['id']
-            ID = '1'
+                printf(get_message(SendEvent.Failed, ()))
+            self.__token = data['token']
+            printf(get_message(SendEvent.Okay, (self.__token)))
+            os.write(2, bytes(self.__token.encode('utf-8')))
+        except Exception:
+            printf(get_message(SendEvent.Failed, ()))
+
+    def control_AST(self):
+        """
+        CONTROL : START/STOP : DO/DONE : token
+        :return:
+        """
+        while not self.__control_event.is_set():
+            if self._control_connection.queue.empty():
+                time.sleep(1)
+                continue
+            op: bytes = self._control_connection.queue.get()
+            op = ast.literal_eval(op.decode('utf-8'))
+
+            if op[0] == 'CONTROL':
+                if self.__token != op[3]:
+                    continue
+                if op[1] == 'START':
+                    if op[2] == 'DO':
+                        if self.__screen_process:
+                            self.__screen_process.kill()
+                        self.__screen_manager = ScreenManager(self.__token, self.__event)
+                        self.__screen_manager.init_msg = LISTEN(f"{self.__token}_screen")
+                        self.__screen_process = get_process(self.__screen_manager)
+                        self.__screen_process.start()
+                        self._control_connection.send(str(('CONTROL', 'START', 'DONE', self.__token)))
+                        self._mode = ClientMode.LISTENER
+                    else:
+                        if self.__screen_process:
+                            self.__screen_process.kill()
+                        self.__screen_receiver = ScreenReceiver(self.__token, self.__event)
+                        self.__screen_receiver.init_msg = CONTROL(f"{self.__token}_screen")
+                        self.__screen_process = get_process(self.__screen_receiver)
+                        self.__screen_process.start()
+                        self._mode = ClientMode.CONTROLLER
+                else:
+                    if self.__screen_process:
+                        self.__screen_process.kill()
+            else:
+                pass
+
+
+
+
+
+    def listen(self) -> None:
+        try:
+            # response = self._session.post(url=self._url('/listen/'))
+            # data = response.json()
+            # if data.get('status', 500) != 200:
+            #     printf(get_message(SendEvent.Failed, ("Network Error")))
+            # ID = data['id']
+            # ID = '1'
+            # self._control_connection.send(str(('CONTROL', 'START', 'DO', self.__token)))
+            printf(get_message(SendEvent.Okay, ()))
             # listener 需要发送screen,接收simple
-            self.__screen_manager = ScreenManager(ID, self.__event)
-            self.__screen_manager.init_msg = LISTEN(f"{ID}_screen")
-            self.__screen_process = get_process(self.__screen_manager)
-            self.__screen_process.start()
+            # self.__screen_manager = ScreenManager(ID, self.__event)
+            # self.__screen_manager.init_msg = LISTEN(f"{ID}_screen")
+            # self.__screen_process = get_process(self.__screen_manager)
+            # self.__screen_process.start()
 
             # self.__simple_receiver = SimpleReceiver(ID, self.__event)
             # self.__simple_receiver.init(LISTEN(f"{ID}_simple"))
             # self.__simple_process = get_process(self.__simple_receiver)
             # self.__simple_process.start()
-            return ID
+            # return ID
         except Exception:
             return ""
 
     def control(self, ID: str) -> bool:
-        self.__screen_receiver = ScreenReceiver(ID, self.__event)
-        self.__screen_receiver.init_msg = CONTROL(f"{ID}_screen")
-        self.__screen_process = get_process(self.__screen_receiver)
-        self.__screen_process.start()
-
+        # self.__screen_receiver = ScreenReceiver(ID, self.__event)
+        # self.__screen_receiver.init_msg = CONTROL(f"{ID}_screen")
+        # self.__screen_process = get_process(self.__screen_receiver)
+        # self.__screen_process.start()
+        self.__token = ID
+        self._control_connection.send(str(('CONTROL', 'START', 'DO', self.__token)))
+        for i in range(3):
+            time.sleep(i + 0.1)
+            if self._mode == ClientMode.CONTROLLER:
+                break
+        if self._mode == ClientMode.CONTROLLER:
+            printf(get_message(SendEvent.Okay, ()))
+        else:
+            printf(get_message(SendEvent.Failed, ()))
         # self.__simple_manager = SimpleManager(ID, self.__event)
         # self.__simple_manager.init(CONTROL(f"{ID}_simple"))
         # self.__simple_process = get_process(self.__simple_manager)
         # self.__simple_process.start()
         return True
+
+    def stop_control_listen(self):
+        self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token)))
 
     def stop(self):
         self.__event.set()
@@ -202,7 +304,12 @@ if __name__ == '__main__':
         ReceiveEvent.UserLogout: manager.logout,
         ReceiveEvent.UserLogin: manager.login,
         ReceiveEvent.ChangeName: manager.change_name,
-        ReceiveEvent.ChangePassword: manager.change_password
+        ReceiveEvent.ChangePassword: manager.change_password,
+        ReceiveEvent.RemoteControl: manager.control,
+        ReceiveEvent.EnableSlave: manager.listen,
+        ReceiveEvent.DisableSlave: manager.stop_control_listen,
+        ReceiveEvent.GetCode: manager.token,
+        ReceiveEvent.RefreshCode: manager.change_token,
     }
     while True:
         event, data = scanf()

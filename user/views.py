@@ -20,6 +20,22 @@ def login(request: HttpRequest) -> JsonResponse:
         return JsonResponse(dict(status=200, token=users[0].token))
     return JsonResponse(dict(status=404))
 
+
+def register(request: HttpRequest) -> JsonResponse:
+    username = request.POST.get('username', '')
+    password = request.POST.get('password', '')
+    if not all((username, password)):
+        return JsonResponse(dict(status=400))
+    if User.objects.filter(username=username).exists():
+        return JsonResponse(dict(status=401))
+    else:
+        token = str(time.time_ns())[-9:]
+        User.objects.create(username=username, password=password, token=token)
+        request.session['is_login'] = True
+        request.session['username'] = username
+        return JsonResponse(dict(status=200, token=token))
+
+
 def change_name(request: HttpRequest):
     if request.session.get('is_login'):
         username = request.session['username']
@@ -32,6 +48,7 @@ def change_name(request: HttpRequest):
         return JsonResponse(dict(status=200))
     return JsonResponse(dict(status=403))
 
+
 def change_password(request: HttpRequest):
     if request.session.get('is_login'):
         password = request.POST.get('password', '')
@@ -40,6 +57,15 @@ def change_password(request: HttpRequest):
         User.objects.filter(username=request.session['username']).update(password=password)
         return JsonResponse(dict(status=200))
     return JsonResponse(dict(status=403))
+
+
+def change_token(request: HttpRequest):
+    if request.session.get('is_login'):
+        token = str(time.time_ns())[-9:]
+        User.objects.filter(username=request.session['username']).update(token=token)
+        return JsonResponse(dict(status=200, token=token))
+    return JsonResponse(dict(status=403))
+
 
 def listen(request: HttpRequest):
     if request.session.get('is_login'):
@@ -62,5 +88,3 @@ def control(request: HttpRequest):
             connection.srem('REMOTE', ID)
         return JsonResponse(dict(status=200))
     return JsonResponse(dict(status=403))
-
-
