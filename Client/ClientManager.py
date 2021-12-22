@@ -52,10 +52,12 @@ def printf(data: Text) -> None:
     # os.write(2, bytes(data.encode('utf-8')))
 
 
-def scanf() -> Tuple[ReceiveEvent, Any]:
+def scanf() -> Tuple[Union[ReceiveEvent, None], Any]:
     data = os.read(0, 4096).decode('utf-8').strip().split('||||')
-    os.write(2, bytes(str(data).encode('utf-8')))
-    return ReceiveEvent(data[0]), data[1:]
+    try:
+        return ReceiveEvent(data[0]), data[1:]
+    except Exception:
+        return None, None
 
 
 @unique
@@ -105,7 +107,7 @@ class ClientManager:
         return self._control_connection.delay
 
     def display_name(self):
-        printf(get_message(SendEvent.DisplayName, (self.__username)))
+        printf(get_message(SendEvent.DisplayName, (self.__username,)))
         return self.__username
 
     def logout(self):
@@ -116,7 +118,7 @@ class ClientManager:
         printf(get_message(SendEvent.ClientReady, ()))
 
     def token(self) -> None:
-        printf(get_message(SendEvent.Okay, (self.__token)))
+        printf(get_message(SendEvent.Okay, (self.__token,)))
 
     @staticmethod
     def _url(_url: str) -> str:
@@ -199,7 +201,7 @@ class ClientManager:
             if data.get('status', 500) != 200:
                 printf(get_message(SendEvent.Failed, ()))
             self.__token = data['token']
-            printf(get_message(SendEvent.Okay, (self.__token)))
+            printf(get_message(SendEvent.Okay, (self.__token,)))
             os.write(2, bytes(self.__token.encode('utf-8')))
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
@@ -319,10 +321,13 @@ if __name__ == '__main__':
         ReceiveEvent.DisableSlave: manager.stop_control_listen,
         ReceiveEvent.GetCode: manager.token,
         ReceiveEvent.RefreshCode: manager.change_token,
+        ReceiveEvent.UserRegister: manager.register
     }
     while True:
         event, data = scanf()
         # os.write(2, b'rec')
+        if not event:
+            continue
         FUNCTIONHASH[event](*data)
         # os.write(2, b'done')
 
