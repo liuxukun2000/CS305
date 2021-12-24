@@ -90,7 +90,7 @@ class ScreenManager(Base):
             self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
             # self.client.send(pickle.dumps(image))
             print(f"Send {self._num} images in {time.time() - self._start} s")
-            time.sleep(3)
+            # time.sleep(3)
 
 
 
@@ -106,6 +106,7 @@ class ScreenReceiver(Base):
     def start(self) -> None:
         self.init()
         print('receive in')
+        self._start = time.time()
         self.__queue = self.client.queue
         while not self.event.is_set():
             image = zlib.decompress(self.__queue.get())
@@ -116,6 +117,7 @@ class ScreenReceiver(Base):
             if self._num % 50 == 0:
                 cv2.imwrite(f"{self._num}.jpg", image)
             image = cv2.imencode('.jpg', image)[1].tostring()
+            debug('recive')
             # image = cv2.resize(cv2.imdecode(image, 1), (self.__x, self.__y))
             # printf(get_message(SendEvent.ScreenImage, (str(base64.b64encode(image)), str(self.client.delay))))
             os.write(1, b'screen-image||||' + base64.b64encode(image) + b'||||' +
@@ -125,7 +127,7 @@ class ScreenReceiver(Base):
             # with open(f"{self._num}.txt", 'w') as f:
             #     f.write(get_message(SendEvent.ScreenImage, (str(base64.b64encode(image)),)))
 
-            # print(f"Receive {self._num} images in {time.time() - self._start} s")
+            debug(f"Receive {self._num} images in {time.time() - self._start} s")
         printf(get_message(SendEvent.EndControl, ()))
         debug('image--------------shut------------------down')
 
