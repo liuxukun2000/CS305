@@ -1,16 +1,18 @@
 import ast
 import pickle
+import sys
 import time
 import zlib
 from multiprocessing import Process
 from threading import Event
 from threading import Thread
+import base64
 from typing import Union, Sequence
 from PIL import ImageEnhance, Image
 import keyboard
 import pyautogui
 import mouse
-
+from events import *
 import cv2
 import numpy
 from PIL import ImageGrab
@@ -83,9 +85,12 @@ class ScreenManager(Base):
         while not self.event.is_set():
             image = cv2.resize(cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR), (self.__x, self.__y))
             self._num += 1
+
+            # self.client.send(zlib.compress(cv2.imencode('.jpg', image)[1], zlib.Z_BEST_COMPRESSION))
             self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
             # self.client.send(pickle.dumps(image))
             print(f"Send {self._num} images in {time.time() - self._start} s")
+            time.sleep(3)
 
 
 
@@ -110,8 +115,19 @@ class ScreenReceiver(Base):
             image = cv2.resize(pickle.loads(image), (self.__x, self.__y))
             if self._num % 50 == 0:
                 cv2.imwrite(f"{self._num}.jpg", image)
-            print(f"Receive {self._num} images in {time.time() - self._start} s")
+            image = cv2.imencode('.jpg', image)[1].tostring()
+            # image = cv2.resize(cv2.imdecode(image, 1), (self.__x, self.__y))
+            # printf(get_message(SendEvent.ScreenImage, (str(base64.b64encode(image)), str(self.client.delay))))
+            os.write(1, b'screen-image||||' + base64.b64encode(image) + b'||||' +
+                   bytes(str(self.client.delay).encode('utf-8')) + b'@@@@')
+            # sys.stdout.flush()
 
+            # with open(f"{self._num}.txt", 'w') as f:
+            #     f.write(get_message(SendEvent.ScreenImage, (str(base64.b64encode(image)),)))
+
+            # print(f"Receive {self._num} images in {time.time() - self._start} s")
+        printf(get_message(SendEvent.EndControl, ()))
+        debug('image--------------shut------------------down')
 
 class SimpleReceiver(Base):
     def __init__(self, ID: str, event: Event) -> None:

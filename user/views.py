@@ -88,3 +88,13 @@ def control(request: HttpRequest):
             connection.srem('REMOTE', ID)
         return JsonResponse(dict(status=200))
     return JsonResponse(dict(status=403))
+
+
+def create_meeting(request: HttpRequest):
+    if request.session.get('is_login'):
+        _id = request.POST.get('token', '')
+        if _id:
+            if not connection.sismember('MEETING', _id):
+                connection.sadd('MEETING', _id)
+                return JsonResponse(dict(status=200))
+    return JsonResponse(dict(status=403))

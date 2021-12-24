@@ -12,66 +12,13 @@ from enum import Enum, unique
 from typing import Union, ByteString, Text, Tuple, Dict, Callable, Any
 import requests
 from utils import *
+import signal
+from events import *
 
 URL = "http://oj.sustech.xyz:8000"
 
-def debug(x: str):
-    os.write(2, bytes(x.encode('utf-8')))
-
-@unique
-class ReceiveEvent(Enum):
-    DisplayReady = 'display-ready'
-    UserLogin = 'user-login'
-    UserRegister = 'user-register'
-
-    GetCode = 'get-code'
-    ChangeName = 'change-name'
-    NetworkDelay = 'network-delay'
-    DisplayName = 'display-name'
-    UserLogout = 'user-logout'
-    ChangePassword = 'change-password'
-    RefreshCode = 'refresh-code'
-
-    EnableSlave = 'enable-slave'
-    DisableSlave = 'disable-slave'
-    RemoteControl = 'remote-control'
 
 
-@unique
-class SendEvent(Enum):
-    ClientReady = 'client-ready'
-    ClientMessage = 'client-message'
-    NetworkDelay = 'network-delay'
-    DisplayName = 'display-name'
-    Okay = 'okay'
-    Failed = 'failed'
-
-
-def printf(data: Text) -> None:
-    os.write(1, bytes(data.encode('utf-8')))
-    # os.write(2, bytes(data.encode('utf-8')))
-
-
-def scanf() -> Tuple[Union[ReceiveEvent, None], Any]:
-    data = os.read(0, 4096).decode('utf-8').strip().split('||||')
-    try:
-        return ReceiveEvent(data[0]), data[1:]
-    except Exception:
-        return None, None
-
-
-@unique
-class ClientMode(Enum):
-    INIT = 0
-    LOGIN = 1
-    LISTENER = 2
-    CONTROLLER = 3
-    LEADER = 4
-    MEETING = 5
-
-
-def get_message(event: SendEvent, msg: Any) -> str:
-    return '||||'.join((event.value, *msg))
 
 
 class ClientManager:
@@ -97,7 +44,6 @@ class ClientManager:
         self.__control_thread.start()
 
         self.__self = str(time.time_ns())
-
 
         self.__username: str = ""
         self.__token: str = ""
@@ -202,7 +148,20 @@ class ClientManager:
                 printf(get_message(SendEvent.Failed, ()))
             self.__token = data['token']
             printf(get_message(SendEvent.Okay, (self.__token,)))
-            os.write(2, bytes(self.__token.encode('utf-8')))
+        except Exception:
+            printf(get_message(SendEvent.Failed, ()))
+
+    def create_meeting(self) -> None:
+        try:
+            token = str(time.time_ns())[-9:]
+            self.__token = token
+            data = dict(token=token)
+            response = self._session.post(url=self._url('/createmeeting/'), data=data)
+            data = response.json()
+            if data.get('status', 500) != 200:
+                printf(get_message(SendEvent.Failed, ()))
+            self.__token = data['token']
+            printf(get_message(SendEvent.Okay, (self.__token,)))
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
 
@@ -230,6 +189,7 @@ class ClientManager:
                         self.__screen_manager = ScreenManager(self.__token, self.__event)
                         self.__screen_manager.init_msg = LISTEN(f"{self.__token}_screen")
                         self.__screen_process = get_process(self.__screen_manager)
+                        self.__screen_process.daemon = True
                         self.__screen_process.start()
                         self._control_connection.send(str(('CONTROL', 'START', 'DONE', self.__token, self.__self)))
                         self._mode = ClientMode.LISTENER
@@ -239,17 +199,15 @@ class ClientManager:
                         self.__screen_receiver = ScreenReceiver(self.__token, self.__event)
                         self.__screen_receiver.init_msg = CONTROL(f"{self.__token}_screen")
                         self.__screen_process = get_process(self.__screen_receiver)
+                        self.__screen_process.daemon = True
                         self.__screen_process.start()
                         self._mode = ClientMode.CONTROLLER
                 else:
                     if self.__screen_process:
+                        self.__screen_process.terminate()
                         self.__screen_process.kill()
             else:
                 pass
-
-
-
-
 
     def listen(self) -> None:
         try:
@@ -304,10 +262,28 @@ class ClientManager:
 
     def stop(self):
         self.__event.set()
+        if self.__screen_process:
+            self.__screen_process.terminate()
+            self.__screen_process.kill()
+        printf(get_message(SendEvent.Okay, ()))
+
+
+manager = ClientManager()
+HANDLED_SIGNALS = (
+    signal.SIGINT,  # Unix signal 2. Sent by Ctrl+C.
+    signal.SIGTERM,  # Unix signal 15. Sent by `kill <pid>`.
+)
+
+
+def signal_handler(a, b):
+    debug('killing')
+    manager.stop()
 
 
 if __name__ == '__main__':
-    manager = ClientManager()
+    for sig in HANDLED_SIGNALS:
+        signal.signal(sig, signal_handler)
+
     FUNCTIONHASH: Dict[ReceiveEvent, Callable] = {
         ReceiveEvent.DisplayReady: manager.connected,
         ReceiveEvent.DisplayName: manager.display_name,
@@ -321,7 +297,9 @@ if __name__ == '__main__':
         ReceiveEvent.DisableSlave: manager.stop_control_listen,
         ReceiveEvent.GetCode: manager.token,
         ReceiveEvent.RefreshCode: manager.change_token,
-        ReceiveEvent.UserRegister: manager.register
+        ReceiveEvent.UserRegister: manager.register,
+        ReceiveEvent.CreateMeeting: manager.create_meeting,
+        ReceiveEvent.TerminateControl: manager.stop
     }
     while True:
         event, data = scanf()
