@@ -9,16 +9,13 @@ import zlib
 from multiprocessing import Process, Queue
 # from asyncio import Queue
 from enum import Enum, unique
-from typing import Union, ByteString, Text, Tuple, Dict, Callable, Any
+from typing import Union, ByteString, Text, Tuple, Dict, Callable, Any, List
 import requests
 from utils import *
 import signal
 from events import *
 
 URL = "http://oj.sustech.xyz:8000"
-
-
-
 
 
 class ClientManager:
@@ -44,6 +41,23 @@ class ClientManager:
         self.__control_thread.start()
 
         self.__self = str(time.time_ns())
+
+        self.__audio_status: int = -1  # -1 force 0 disable 1 enable
+        self.__video_status: int = 0  # 0 down 1 up
+        self.__video_sharer: str = ''
+        self.__is_owner: bool = False
+        self.__is_admin: bool = False
+
+        self.__checking_user: str = ''
+        self.__check: int = 0
+
+        self.__getting_list: bool = True
+        self.__tmp_list: str = ''
+
+        self.__meeting_list: Dict[str, Dict[str, Any]] = dict()
+        """
+        is_admin, is_owner, video, audio
+        """
 
         self.__username: str = ""
         self.__token: str = ""
@@ -151,7 +165,7 @@ class ClientManager:
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
 
-    def create_meeting(self) -> None:
+    def create_meeting(self, *args) -> None:
         try:
             token = str(time.time_ns())[-9:]
             self.__token = token
@@ -167,17 +181,27 @@ class ClientManager:
 
     def control_FSA(self):
         """
-        CONTROL : START/STOP : DO/DONE : token
+        CONTROL : START/STOP : DO/DONE : token : uuid
+
+        MEETING: AUDIO : token : uuid : DISABLE/ENABLE : username
+        MEETING: VIDEO : token : uuid : DISABLE/ENABLE : username
+        MEETING: MESSAGE : token : uuid : msg : username
+        MEETING: OWNER : token : uuid : username : new_name
+        MEETING: ADMIN : token : uuid : username : new_name
+        MEETING: JOIN : token : uuid : username : audio
+        MEETING: LEAVE : token : uuid : username
+        MEETING: SHUTDOWN : token: uuid
+        MEETING: CHECK : token : uuid : username : DO/DONE
+        MEETING: GET : token : uuid : msg
         :return:
         """
         debug('start control-----------------')
         while not self.__control_event.is_set():
             if self._control_connection.queue.empty():
-                debug('queue empty-----------------')
                 time.sleep(1)
                 continue
             op: bytes = self._control_connection.queue.get()
-            op = ast.literal_eval(op.decode('utf-8'))
+            op: Sequence[Union[str, Union[int, dict]]] = ast.literal_eval(op.decode('utf-8'))
             debug('control receive-----------------' + str(op))
             if op[0] == 'CONTROL':
                 if self.__token != op[3] or op[4] == self.__self:
@@ -187,9 +211,14 @@ class ClientManager:
                         if self.__screen_process:
                             self.__screen_process.kill()
                         self.__screen_manager = ScreenManager(self.__token, self.__event)
+                        self.__simple_receiver = SimpleReceiver(self.__token, self.__event)
                         self.__screen_manager.init_msg = LISTEN(f"{self.__token}_screen")
+                        self.__simple_receiver.init_msg = LISTEN(f"{self.__token}_simple")
                         self.__screen_process = get_process(self.__screen_manager)
+                        self.__simple_process = get_process(self.__simple_receiver)
                         self.__screen_process.daemon = True
+                        self.__simple_process.daemon = True
+                        self.__simple_process.start()
                         self.__screen_process.start()
                         self._control_connection.send(str(('CONTROL', 'START', 'DONE', self.__token, self.__self)))
                         self._mode = ClientMode.LISTENER
@@ -197,48 +226,92 @@ class ClientManager:
                         if self.__screen_process:
                             self.__screen_process.kill()
                         self.__screen_receiver = ScreenReceiver(self.__token, self.__event)
+                        self.__simple_manager = SimpleManager(self.__token, self.__event)
                         self.__screen_receiver.init_msg = CONTROL(f"{self.__token}_screen")
+                        self.__simple_receiver.init_msg = CONTROL(f"{self.__token}_simple")
                         self.__screen_process = get_process(self.__screen_receiver)
+                        self.__simple_process = get_process(self.__simple_manager)
+                        self.__simple_process.daemon = True
                         self.__screen_process.daemon = True
+                        self.__simple_process.start()
                         self.__screen_process.start()
                         self._mode = ClientMode.CONTROLLER
                 else:
                     if self.__screen_process:
                         self.__screen_process.terminate()
                         self.__screen_process.kill()
+            elif op[0] == 'MEETING':
+                if self.__token != op[2] or op[3] == self.__self:
+                    continue
+                if self.__getting_list and op[1] != 'GET':
+                    continue
+                if op[1] == 'CHECK':
+                    if op[5] == 'DO':
+                        if self.__meeting_list.get(op[4], dict()).get('is_admin', False) or \
+                               self.__meeting_list.get(op[4], dict()).get('is_owner', False):
+                            pass
+                    else:
+                        if self.__checking_user == op[4]:
+                            self.__check += 1
+                elif op[1] == 'GET':
+                    if len(op) == 4:
+                        if self.__getting_list:
+                            continue
+                        pass
+                    else:
+                        self.__meeting_list = op[5]
+                        self.__getting_list = False
+                elif op[1] == 'AUDIO':
+                    if op[4] == 'DISABLE':
+                        if op[5] == self.__username:
+                            self.__audio_status = -1
+                        self.__meeting_list[op[5]]['audio'] = 0
+                    else:
+                        if op[5] == self.__username:
+                            self.__audio_status = 0
+                elif op[1] == 'MESSAGE':
+                    pass
+                elif op[1] == 'OWNER':
+                    if self.__meeting_list[op[4]]['is_owner']:
+                        self.__meeting_list[op[4]]['is_owner'] = False
+                        self.__meeting_list[op[5]]['is_owner'] = True
+                        if op[5] == self.__username:
+                            self.__is_owner = True
+                elif op[1] == 'ADMIN':
+                    if self.__meeting_list[op[4]]['is_owner'] or self.__meeting_list[op[4]]['is_admin']:
+                        self.__meeting_list[op[5]]['is_admin'] = not self.__meeting_list[op[5]]['is_admin']
+                        if op[5] == self.__username:
+                            self.__is_admin = not self.__is_admin
+                elif op[1] == 'JOIN':
+                    if op[4] in self.__meeting_list:
+                        self.__meeting_list.pop(op[4])
+                    self.__meeting_list[op[4]] = dict(
+                        is_admin=False,
+                        is_owner=False,
+                        video=0,
+                        audio=op[5]
+                    )
+                elif op[1] == 'LEAVE':
+                    if op[4] in self.__meeting_list:
+                        self.__meeting_list.pop(op[4])
+                    if op[4] == self.__username:
+                        self.stop()
+                elif op[1] == 'VIDEO':
+                    if op[4] == 'DISABLE':
+                        self.__meeting_list[op[5]]['audio'] = 0
+                    else:
+                        self.__meeting_list[op[5]]['audio'] = 1
             else:
                 pass
 
     def listen(self) -> None:
         try:
-            # response = self._session.post(url=self._url('/listen/'))
-            # data = response.json()
-            # if data.get('status', 500) != 200:
-            #     printf(get_message(SendEvent.Failed, ("Network Error")))
-            # ID = data['id']
-            # ID = '1'
-            # self._control_connection.send(str(('CONTROL', 'START', 'DO', self.__token)))
             self._control_connection.send(str(('control', self.__token)))
             printf(get_message(SendEvent.Okay, ()))
-            # listener 需要发送screen,接收simple
-            # self.__screen_manager = ScreenManager(ID, self.__event)
-            # self.__screen_manager.init_msg = LISTEN(f"{ID}_screen")
-            # self.__screen_process = get_process(self.__screen_manager)
-            # self.__screen_process.start()
-
-            # self.__simple_receiver = SimpleReceiver(ID, self.__event)
-            # self.__simple_receiver.init(LISTEN(f"{ID}_simple"))
-            # self.__simple_process = get_process(self.__simple_receiver)
-            # self.__simple_process.start()
-            # return ID
         except Exception:
-            return ""
+            return
 
     def control(self, ID: str) -> bool:
-        # self.__screen_receiver = ScreenReceiver(ID, self.__event)
-        # self.__screen_receiver.init_msg = CONTROL(f"{ID}_screen")
-        # self.__screen_process = get_process(self.__screen_receiver)
-        # self.__screen_process.start()
         self.__token = ID
         self._control_connection.send(str(('control', self.__token)))
         time.sleep(0.5)
@@ -251,14 +324,99 @@ class ClientManager:
             printf(get_message(SendEvent.Okay, ()))
         else:
             printf(get_message(SendEvent.Failed, ()))
-        # self.__simple_manager = SimpleManager(ID, self.__event)
-        # self.__simple_manager.init(CONTROL(f"{ID}_simple"))
-        # self.__simple_process = get_process(self.__simple_manager)
-        # self.__simple_process.start()
         return True
+
+    def join_meeting(self, token: str, password: str, audio: str):
+        audio = 1 if audio == 'true' else 0
+        data = dict(token=token, password=password)
+        response = self._session.post(url=self._url('/checkmeeting/'), data=data)
+        data = response.json()
+        if data.get('status', 500) != 200:
+            printf(get_message(SendEvent.Failed, ()))
+        self.__token = token
+        self.__is_owner = data.get('is_owner', False)
+        self.__audio_status = audio
+        if not self.__is_owner:
+            self._control_connection.send(str(('MEETING', 'GET', self.__token, self.__self)))
+            for i in range(3):
+                time.sleep(i + 1)
+                if not self.__getting_list:
+                    break
+        self.__meeting_list[self.__username] = dict(
+                        is_admin=False,
+                        is_owner=False,
+                        video=0,
+                        audio=audio
+                    )
+        self._control_connection.send(str(('MEETING', 'JOIN', self.__token, self.__self, self.__username, audio)))
+        self.stop()
+
+    def leave_meeting(self, name: str):
+        if name != self.__username:
+            if not self.__is_owner and not self.__is_admin:
+                printf(get_message(SendEvent.Failed, ()))
+        self._control_connection.send(str(('MEETING', 'LEAVE', self.__token, self.__self, self.__username)))
+        pass
+
+    def change_owner(self, new_name: str):
+        if not self.__is_owner:
+            printf(get_message(SendEvent.Failed, ()))
+        self._control_connection.send(str(('MEETING', 'OWNER', self.__token, self.__self, self.__username, new_name)))
+        self.__is_owner = False
+        self.__meeting_list[self.__username]['is_owner'] = False
+        self.__meeting_list[new_name]['is_owner'] = True
+
+    def change_admin(self, name: str):
+        if not self.__is_owner and not self.__is_admin:
+            printf(get_message(SendEvent.Failed, ()))
+        self._control_connection.send(
+            str(('MEETING', 'ADMIN', self.__token, self.__self, self.__username, name)))
+        self.__meeting_list[name]['is_admin'] = True
+
+    def change_audio(self, name: str):
+        if name == self.__username:
+            if self.__audio_status == -1:
+                printf(get_message(SendEvent.Failed, ()))
+                return
+            else:
+                self.__audio_status = 1 - self.__audio_status
+                self.__meeting_list[self.__username]['audio'] = bool(self.__audio_status)
+        if self.__audio_status == 1:
+            self._control_connection.send(
+                str(('MEETING', 'AUDIO', self.__token, self.__self, 'ENABLE', self.__username)))
+        else:
+            self._control_connection.send(
+                str(('MEETING', 'AUDIO', self.__token, self.__self, 'DISABLE', self.__username)))
+
+    def change_video(self):
+        if self.__video_status == 1:
+            self._control_connection.send(
+                str(('MEETING', 'VIDEO', self.__token, self.__self, 'DISABLE', self.__username)))
+            self.__video_status = 0
+            self.__screen_process.terminate()
+            self.__screen_process.kill()
+            printf(get_message(SendEvent.Okay, ()))
+            return
+        op = True
+        for _, j in self.__meeting_list.items():
+            if j['video']:
+                op = False
+                break
+        if not op:
+            printf(get_message(SendEvent.Failed, ()))
+            return
+        self.__video_status = 1
+        self._control_connection.send(
+            str(('MEETING', 'VIDEO', self.__token, self.__self, 'ENABLE', self.__username)))
+
+    def send_message(self, msg: str):
+        self._control_connection.send(
+            str(('MEETING', 'MESSAGE', self.__token, self.__self, msg)))
+        printf(get_message(SendEvent.Okay, ()))
 
     def stop_control_listen(self):
         self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
+
 
     def stop(self):
         self.__event.set()

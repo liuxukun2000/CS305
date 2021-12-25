@@ -1,6 +1,6 @@
 from django.http.request import *
 from django.http.response import *
-from user.models import User
+from user.models import User, Meeting
 import time
 from typing import Dict
 import redis
@@ -93,8 +93,22 @@ def control(request: HttpRequest):
 def create_meeting(request: HttpRequest):
     if request.session.get('is_login'):
         _id = request.POST.get('token', '')
+        password = request.POST.get('password', '')
         if _id:
-            if not connection.sismember('MEETING', _id):
-                connection.sadd('MEETING', _id)
+            if not Meeting.objects.filter(meeting_id=_id).exists():
+                user = User.objects.filter(username=request.session['username'])
+                Meeting.objects.create(meeting_id=_id, password=password, create_user=user)
                 return JsonResponse(dict(status=200))
+    return JsonResponse(dict(status=403))
+
+
+def check_meeting(request: HttpRequest):
+    if request.session.get('is_login'):
+        _id = request.POST.get('token', '')
+        password = request.POST.get('password', '')
+        if _id:
+            meeting = Meeting.objects.filter(meeting_id=_id, password=password)
+            if meeting:
+                owner = meeting[0].create_user.username == request.session['username']
+                return JsonResponse(dict(status=200, is_owner=owner))
     return JsonResponse(dict(status=403))

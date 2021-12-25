@@ -24,5 +24,6 @@ urlpatterns = [
     path('changepwd/', change_password),
     path('listen/', listen),
     path('changetoken/', change_token),
-    path('createmeeting/', create_meeting)
+    path('createmeeting/', create_meeting),
+    path('checkmeeting/', check_meeting)
 ]
