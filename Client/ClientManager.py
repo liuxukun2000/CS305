@@ -188,7 +188,8 @@ class ClientManager:
         return 0
 
     def get_member(self) -> str:
-        return '||||'.join('####'.join((_, self.get_level(i['is_owner'], i['is_admin']), max(self.__audio_status, 0))) for _, i in self.__meeting_list.items())
+        return '||||'.join('####'.join((_, str(self.get_level(i['is_owner'], i['is_admin'])),
+                                        str(max(self.__audio_status, 0)))) for _, i in self.__meeting_list.items())
 
     def control_FSA(self):
         """
@@ -377,6 +378,7 @@ class ClientManager:
         self.__is_owner = data.get('is_owner', False)
         self.__audio_status = audio
         self._control_connection.send(str(('MEETING', 'GET', self.__token, self.__self)))
+        debug('sent control message')
         for i in range(3):
             time.sleep(i + 1)
             if not self.__getting_list:
@@ -391,6 +393,8 @@ class ClientManager:
                         video=0,
                         audio=audio
                     )
+        printf(get_message(SendEvent.Okay, ()))
+        printf(get_message(SendEvent.UpdateInfo, (self.__token, self.__username)))
         self._control_connection.send(str(('MEETING', 'JOIN', self.__token, self.__self, self.__username, audio)))
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
