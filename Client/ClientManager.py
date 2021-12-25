@@ -377,8 +377,11 @@ class ClientManager:
         self.__token = token
         self.__is_owner = data.get('is_owner', False)
         self.__audio_status = audio
+        self._control_connection.send(str(('control', self.__token)))
+        time.sleep(1)
         self._control_connection.send(str(('MEETING', 'GET', self.__token, self.__self)))
         debug('sent control message')
+
         for i in range(3):
             time.sleep(i + 1)
             if not self.__getting_list:
