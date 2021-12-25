@@ -2,6 +2,9 @@ import os
 from enum import Enum, unique
 from typing import Any, Text, Union, Any, Tuple
 
+buf: str = ""
+
+
 def debug(x: str):
     os.write(2, bytes(x.encode('utf-8')))
 
@@ -29,6 +32,15 @@ class ReceiveEvent(Enum):
     TerminateControl = 'terminate-control'
     ConfirmExit = 'confirm-exit'
 
+    ExitMeeting = 'exit-meeting'  # username
+    StartShare = 'start-share'  #
+    EndShare = 'end-share'  #
+    EnableAudio = 'enable-audio'  # username
+    DisableAudio = 'disable-audio'  # username
+    SendMessage = 'send-message'  # msg
+    SetAdmin = 'set-admin'  # username
+    GiveHost = 'give-host'  # username
+
 
 @unique
 class SendEvent(Enum):
@@ -41,6 +53,14 @@ class SendEvent(Enum):
     ScreenImage = 'screen-image'
     EndControl = 'end-control'
 
+    UpdateLevel = 'update-level'  # 0/1/2
+    UpdateShare = 'update-share'  # username/''
+    UpdateAudio = 'update-audio'  # true/false
+    UpdateInfo = 'update-info'  # __token, username
+    UpdateMessage = 'update-message'  # from, msg
+    UpdateMembers = 'update-members'  # username, level, audio
+    ForceExit = 'force-exit'  #
+
 
 def printf(data: Text) -> None:
     os.write(1, bytes(data.encode('utf-8')))
@@ -48,9 +68,17 @@ def printf(data: Text) -> None:
 
 
 def scanf() -> Tuple[Union[ReceiveEvent, None], Any]:
-    data = os.read(0, 4096).decode('utf-8').strip().split('||||')
     try:
-        return ReceiveEvent(data[0]), data[1:]
+        global buf
+        data = os.read(0, 4096).decode('utf-8').strip()
+        buf += data
+        pos = buf.find('@@@@')
+        if pos == -1:
+            return None, None
+        else:
+            ans = buf[: pos].split('||||')
+            buf = buf[pos + 4:]
+            return ReceiveEvent(ans[0]), ans[1:]
     except Exception:
         return None, None
 

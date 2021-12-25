@@ -179,6 +179,17 @@ class ClientManager:
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
 
+    @staticmethod
+    def get_level(owner: bool, admin: bool) -> int:
+        if owner:
+            return 2
+        if admin:
+            return 1
+        return 0
+
+    def get_member(self) -> str:
+        return '||||'.join('####'.join(_, self.get_level(i['is_owner'], i['is_admin']), max(self.__audio_status, 0)) for _, i in self.__meeting_list.items())
+
     def control_FSA(self):
         """
         CONTROL : START/STOP : DO/DONE : token : uuid
@@ -257,7 +268,7 @@ class ClientManager:
                     if len(op) == 4:
                         if self.__getting_list:
                             continue
-                        pass
+                        self._control_connection.send(str((*op, self.__meeting_list)))
                     else:
                         self.__meeting_list = op[5]
                         self.__getting_list = False
@@ -265,44 +276,68 @@ class ClientManager:
                     if op[4] == 'DISABLE':
                         if op[5] == self.__username:
                             self.__audio_status = -1
+                            printf(get_message(SendEvent.UpdateAudio, ('false',)))
                         self.__meeting_list[op[5]]['audio'] = 0
                     else:
                         if op[5] == self.__username:
-                            self.__audio_status = 0
+                            if self.__audio_status == -1:
+                                self.__audio_status = 0
+                            printf(get_message(SendEvent.UpdateAudio, ('true' if self.__audio_status else 'false',)))
                 elif op[1] == 'MESSAGE':
-                    pass
+                    printf(get_message(SendEvent.UpdateMessage, (op[5], op[4])))
                 elif op[1] == 'OWNER':
                     if self.__meeting_list[op[4]]['is_owner']:
                         self.__meeting_list[op[4]]['is_owner'] = False
                         self.__meeting_list[op[5]]['is_owner'] = True
                         if op[5] == self.__username:
                             self.__is_owner = True
+                            printf(get_message(SendEvent.UpdateLevel, (3,)))
                 elif op[1] == 'ADMIN':
-                    if self.__meeting_list[op[4]]['is_owner'] or self.__meeting_list[op[4]]['is_admin']:
+                    if self.__meeting_list[op[4]]['is_owner']:
                         self.__meeting_list[op[5]]['is_admin'] = not self.__meeting_list[op[5]]['is_admin']
                         if op[5] == self.__username:
                             self.__is_admin = not self.__is_admin
+                            printf(get_message(SendEvent.UpdateLevel, (1 + int(self.__is_owner),)))
                 elif op[1] == 'JOIN':
                     if op[4] in self.__meeting_list:
-                        self.__meeting_list.pop(op[4])
+                        continue
+                        # self.__meeting_list.pop(op[4])
                     self.__meeting_list[op[4]] = dict(
                         is_admin=False,
                         is_owner=False,
                         video=0,
                         audio=op[5]
                     )
+                    printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
                 elif op[1] == 'LEAVE':
                     if op[4] in self.__meeting_list:
                         self.__meeting_list.pop(op[4])
+                        printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
                     if op[4] == self.__username:
                         self.stop()
                 elif op[1] == 'VIDEO':
                     if op[4] == 'DISABLE':
                         self.__meeting_list[op[5]]['audio'] = 0
+                        printf(get_message(SendEvent.UpdateShare, ('',)))
                     else:
                         self.__meeting_list[op[5]]['audio'] = 1
+                        printf(get_message(SendEvent.UpdateShare, (op[5],)))
             else:
                 pass
+
+    def start_screen_manager(self):
+        self.__screen_manager = ScreenManager(self.__token, self.__event)
+        self.__screen_manager.init_msg = LISTEN(f"{self.__token}_screen")
+        self.__screen_process = get_process(self.__screen_manager)
+        self.__screen_process.daemon = True
+        self.__screen_process.start()
+
+    def start_screen_listener(self):
+        self.__screen_receiver = ScreenReceiver(self.__token, self.__event)
+        self.__screen_receiver.init_msg = CONTROL(f"{self.__token}_screen")
+        self.__screen_process = get_process(self.__screen_receiver)
+        self.__screen_process.daemon = True
+        self.__screen_process.start()
 
     def listen(self) -> None:
         try:
@@ -333,30 +368,36 @@ class ClientManager:
         data = response.json()
         if data.get('status', 500) != 200:
             printf(get_message(SendEvent.Failed, ()))
+            return
         self.__token = token
         self.__is_owner = data.get('is_owner', False)
         self.__audio_status = audio
+        self._control_connection.send(str(('MEETING', 'GET', self.__token, self.__self)))
+        for i in range(3):
+            time.sleep(i + 1)
+            if not self.__getting_list:
+                break
         if not self.__is_owner:
-            self._control_connection.send(str(('MEETING', 'GET', self.__token, self.__self)))
-            for i in range(3):
-                time.sleep(i + 1)
-                if not self.__getting_list:
-                    break
+            if self.__getting_list:
+                printf(get_message(SendEvent.Failed, ()))
+                return
         self.__meeting_list[self.__username] = dict(
                         is_admin=False,
-                        is_owner=False,
+                        is_owner=self.__is_owner,
                         video=0,
                         audio=audio
                     )
         self._control_connection.send(str(('MEETING', 'JOIN', self.__token, self.__self, self.__username, audio)))
-        self.stop()
+        printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def leave_meeting(self, name: str):
         if name != self.__username:
             if not self.__is_owner and not self.__is_admin:
                 printf(get_message(SendEvent.Failed, ()))
         self._control_connection.send(str(('MEETING', 'LEAVE', self.__token, self.__self, self.__username)))
-        pass
+        if self.__screen_process:
+            self.__screen_process.terminate()
+            self.__screen_process.kill()
 
     def change_owner(self, new_name: str):
         if not self.__is_owner:
@@ -367,11 +408,12 @@ class ClientManager:
         self.__meeting_list[new_name]['is_owner'] = True
 
     def change_admin(self, name: str):
-        if not self.__is_owner and not self.__is_admin:
+        if not self.__is_owner:
             printf(get_message(SendEvent.Failed, ()))
         self._control_connection.send(
             str(('MEETING', 'ADMIN', self.__token, self.__self, self.__username, name)))
-        self.__meeting_list[name]['is_admin'] = True
+        self.__meeting_list[name]['is_admin'] = not self.__meeting_list[name]['is_admin']
+        printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_audio(self, name: str):
         if name == self.__username:
@@ -387,6 +429,7 @@ class ClientManager:
         else:
             self._control_connection.send(
                 str(('MEETING', 'AUDIO', self.__token, self.__self, 'DISABLE', self.__username)))
+        printf(get_message(SendEvent.UpdateAudio, ('true' if self.__audio_status else 'false',)))
 
     def change_video(self):
         if self.__video_status == 1:
@@ -395,7 +438,12 @@ class ClientManager:
             self.__video_status = 0
             self.__screen_process.terminate()
             self.__screen_process.kill()
-            printf(get_message(SendEvent.Okay, ()))
+            printf(get_message(SendEvent.UpdateShare, ('',)))
+            self.__meeting_list[self.__username]['video'] = bool(self.__video_status)
+            if self.__screen_process:
+                self.__screen_process.terminate()
+                self.__screen_process.kill()
+            self.start_screen_listener()
             return
         op = True
         for _, j in self.__meeting_list.items():
@@ -408,15 +456,20 @@ class ClientManager:
         self.__video_status = 1
         self._control_connection.send(
             str(('MEETING', 'VIDEO', self.__token, self.__self, 'ENABLE', self.__username)))
+        self.__meeting_list[self.__username]['video'] = bool(self.__video_status)
+        if self.__screen_process:
+            self.__screen_process.terminate()
+            self.__screen_process.kill()
+        self.start_screen_manager()
+        printf(get_message(SendEvent.UpdateShare, (self.__username,)))
 
     def send_message(self, msg: str):
         self._control_connection.send(
-            str(('MEETING', 'MESSAGE', self.__token, self.__self, msg)))
+            str(('MEETING', 'MESSAGE', self.__token, self.__self, msg, self.__username)))
         printf(get_message(SendEvent.Okay, ()))
 
     def stop_control_listen(self):
         self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
-
 
     def stop(self):
         self.__event.set()
@@ -457,7 +510,15 @@ if __name__ == '__main__':
         ReceiveEvent.RefreshCode: manager.change_token,
         ReceiveEvent.UserRegister: manager.register,
         ReceiveEvent.CreateMeeting: manager.create_meeting,
-        ReceiveEvent.TerminateControl: manager.stop
+        ReceiveEvent.TerminateControl: manager.stop,
+        ReceiveEvent.ExitMeeting: manager.leave_meeting,
+        ReceiveEvent.StartShare: manager.change_video,
+        ReceiveEvent.EndShare: manager.change_video,
+        ReceiveEvent.EnableAudio: manager.change_audio,
+        ReceiveEvent.DisableAudio: manager.change_audio,
+        ReceiveEvent.SendMessage: manager.send_message,
+        ReceiveEvent.SetAdmin: manager.change_admin,
+        ReceiveEvent.GiveHost: manager.change_owner
     }
     while True:
         event, data = scanf()
