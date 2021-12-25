@@ -269,7 +269,7 @@ class ClientManager:
                     if len(op) == 4:
                         if self.__getting_list:
                             continue
-                        self._control_connection.send(str((*op, self.__meeting_list)))
+                        self._control_connection.send(str((*op[:2], self.__self, self.__meeting_list)))
                     else:
                         self.__meeting_list = op[5]
                         self.__getting_list = False
