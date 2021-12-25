@@ -188,7 +188,7 @@ class ClientManager:
         return 0
 
     def get_member(self) -> str:
-        return '||||'.join('####'.join(_, self.get_level(i['is_owner'], i['is_admin']), max(self.__audio_status, 0)) for _, i in self.__meeting_list.items())
+        return '||||'.join('####'.join((_, self.get_level(i['is_owner'], i['is_admin']), max(self.__audio_status, 0))) for _, i in self.__meeting_list.items())
 
     def control_FSA(self):
         """
@@ -282,7 +282,11 @@ class ClientManager:
                         if op[5] == self.__username:
                             if self.__audio_status == -1:
                                 self.__audio_status = 0
+                                self.__meeting_list[op[5]]['audio'] = 0
                             printf(get_message(SendEvent.UpdateAudio, ('true' if self.__audio_status else 'false',)))
+                        else:
+                            self.__meeting_list[op[5]]['audio'] = 1
+                    printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
                 elif op[1] == 'MESSAGE':
                     printf(get_message(SendEvent.UpdateMessage, (op[5], op[4])))
                 elif op[1] == 'OWNER':
@@ -291,13 +295,13 @@ class ClientManager:
                         self.__meeting_list[op[5]]['is_owner'] = True
                         if op[5] == self.__username:
                             self.__is_owner = True
-                            printf(get_message(SendEvent.UpdateLevel, (3,)))
+                            printf(get_message(SendEvent.UpdateLevel, (2,)))
                 elif op[1] == 'ADMIN':
                     if self.__meeting_list[op[4]]['is_owner']:
                         self.__meeting_list[op[5]]['is_admin'] = not self.__meeting_list[op[5]]['is_admin']
                         if op[5] == self.__username:
                             self.__is_admin = not self.__is_admin
-                            printf(get_message(SendEvent.UpdateLevel, (1 + int(self.__is_owner),)))
+                            printf(get_message(SendEvent.UpdateLevel, (self.get_level(self.__is_owner, self.__is_admin),)))
                 elif op[1] == 'JOIN':
                     if op[4] in self.__meeting_list:
                         continue
@@ -406,6 +410,8 @@ class ClientManager:
         self.__is_owner = False
         self.__meeting_list[self.__username]['is_owner'] = False
         self.__meeting_list[new_name]['is_owner'] = True
+        printf(get_message(SendEvent.UpdateLevel, (0,)))
+        printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_admin(self, name: str):
         if not self.__is_owner:
@@ -436,8 +442,8 @@ class ClientManager:
             self._control_connection.send(
                 str(('MEETING', 'VIDEO', self.__token, self.__self, 'DISABLE', self.__username)))
             self.__video_status = 0
-            self.__screen_process.terminate()
-            self.__screen_process.kill()
+            # self.__screen_process.terminate()
+            # self.__screen_process.kill()
             printf(get_message(SendEvent.UpdateShare, ('',)))
             self.__meeting_list[self.__username]['video'] = bool(self.__video_status)
             if self.__screen_process:
@@ -518,7 +524,8 @@ if __name__ == '__main__':
         ReceiveEvent.DisableAudio: manager.change_audio,
         ReceiveEvent.SendMessage: manager.send_message,
         ReceiveEvent.SetAdmin: manager.change_admin,
-        ReceiveEvent.GiveHost: manager.change_owner
+        ReceiveEvent.GiveHost: manager.change_owner,
+        ReceiveEvent.JoinMeeting: manager.join_meeting
     }
     while True:
         event, data = scanf()

@@ -97,7 +97,7 @@ def create_meeting(request: HttpRequest):
         if _id:
             if not Meeting.objects.filter(meeting_id=_id).exists():
                 user = User.objects.filter(username=request.session['username'])
-                Meeting.objects.create(meeting_id=_id, password=password, create_user=user)
+                Meeting.objects.create(meeting_id=_id, password=password, create_user=user[0])
                 return JsonResponse(dict(status=200))
     return JsonResponse(dict(status=403))
 
