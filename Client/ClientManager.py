@@ -165,16 +165,16 @@ class ClientManager:
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
 
-    def create_meeting(self, *args) -> None:
+    def create_meeting(self, password) -> None:
         try:
             token = str(time.time_ns())[-9:]
             self.__token = token
-            data = dict(token=token)
+            data = dict(token=token, password=password)
             response = self._session.post(url=self._url('/createmeeting/'), data=data)
             data = response.json()
             if data.get('status', 500) != 200:
                 printf(get_message(SendEvent.Failed, ()))
-            self.__token = data['token']
+            self.__token = token
             printf(get_message(SendEvent.Okay, (self.__token,)))
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
@@ -394,6 +394,7 @@ class ClientManager:
                         audio=audio
                     )
         printf(get_message(SendEvent.Okay, ()))
+        time.sleep(3)
         printf(get_message(SendEvent.UpdateInfo, (self.__token, self.__username)))
         self._control_connection.send(str(('MEETING', 'JOIN', self.__token, self.__self, self.__username, audio)))
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
@@ -402,7 +403,6 @@ class ClientManager:
         if name != self.__username:
             if not self.__is_owner and not self.__is_admin:
                 printf(get_message(SendEvent.Failed, ()))
-        printf(get_message(SendEvent.Okay, ()))
         printf(get_message(SendEvent.Okay, ()))
         self._control_connection.send(str(('MEETING', 'LEAVE', self.__token, self.__self, self.__username)))
         if self.__screen_process:
@@ -416,6 +416,7 @@ class ClientManager:
         self.__is_owner = False
         self.__meeting_list[self.__username]['is_owner'] = False
         self.__meeting_list[new_name]['is_owner'] = True
+        printf(get_message(SendEvent.Okay, ()))
         printf(get_message(SendEvent.UpdateLevel, (0,)))
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
@@ -444,6 +445,7 @@ class ClientManager:
                 str(('MEETING', 'AUDIO', self.__token, self.__self, 'DISABLE', self.__username)))
         printf(get_message(SendEvent.Okay, ()))
         printf(get_message(SendEvent.UpdateAudio, ('true' if self.__audio_status else 'false',)))
+
 
     def change_video(self):
         if self.__video_status == 1:

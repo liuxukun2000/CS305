@@ -3,8 +3,7 @@ import pickle
 import sys
 import time
 import zlib
-from multiprocessing import Process
-from threading import Event
+from multiprocessing import Process, Event
 from threading import Thread
 import base64
 from typing import Union, Sequence
