@@ -402,6 +402,8 @@ class ClientManager:
         if name != self.__username:
             if not self.__is_owner and not self.__is_admin:
                 printf(get_message(SendEvent.Failed, ()))
+        printf(get_message(SendEvent.Okay, ()))
+        printf(get_message(SendEvent.Okay, ()))
         self._control_connection.send(str(('MEETING', 'LEAVE', self.__token, self.__self, self.__username)))
         if self.__screen_process:
             self.__screen_process.terminate()
@@ -423,6 +425,7 @@ class ClientManager:
         self._control_connection.send(
             str(('MEETING', 'ADMIN', self.__token, self.__self, self.__username, name)))
         self.__meeting_list[name]['is_admin'] = not self.__meeting_list[name]['is_admin']
+        printf(get_message(SendEvent.Okay, ()))
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_audio(self, name: str):
@@ -439,6 +442,7 @@ class ClientManager:
         else:
             self._control_connection.send(
                 str(('MEETING', 'AUDIO', self.__token, self.__self, 'DISABLE', self.__username)))
+        printf(get_message(SendEvent.Okay, ()))
         printf(get_message(SendEvent.UpdateAudio, ('true' if self.__audio_status else 'false',)))
 
     def change_video(self):
@@ -471,6 +475,7 @@ class ClientManager:
             self.__screen_process.terminate()
             self.__screen_process.kill()
         self.start_screen_manager()
+        printf(get_message(SendEvent.Okay, ()))
         printf(get_message(SendEvent.UpdateShare, (self.__username,)))
 
     def send_message(self, msg: str):
