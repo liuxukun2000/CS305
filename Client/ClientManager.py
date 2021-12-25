@@ -387,6 +387,7 @@ class ClientManager:
             if self.__getting_list:
                 printf(get_message(SendEvent.Failed, ()))
                 return
+        self.__getting_list = False
         self.__meeting_list[self.__username] = dict(
                         is_admin=False,
                         is_owner=self.__is_owner,
@@ -396,6 +397,7 @@ class ClientManager:
         printf(get_message(SendEvent.Okay, ()))
         time.sleep(3)
         printf(get_message(SendEvent.UpdateInfo, (self.__token, self.__username)))
+        printf(get_message(SendEvent.UpdateLevel, (str(self.get_level(self.__is_owner, self.__is_admin)),)))
         self._control_connection.send(str(('MEETING', 'JOIN', self.__token, self.__self, self.__username, audio)))
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
