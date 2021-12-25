@@ -240,7 +240,7 @@ class ClientManager:
                         self.__screen_receiver = ScreenReceiver(self.__token, self.__event)
                         self.__simple_manager = SimpleManager(self.__token, self.__event)
                         self.__screen_receiver.init_msg = CONTROL(f"{self.__token}_screen")
-                        self.__simple_receiver.init_msg = CONTROL(f"{self.__token}_simple")
+                        self.__simple_manager.init_msg = CONTROL(f"{self.__token}_simple")
                         self.__screen_process = get_process(self.__screen_receiver)
                         self.__simple_process = get_process(self.__simple_manager)
                         self.__simple_process.daemon = True
@@ -269,9 +269,9 @@ class ClientManager:
                     if len(op) == 4:
                         if self.__getting_list:
                             continue
-                        self._control_connection.send(str((*op[:2], self.__self, self.__meeting_list)))
+                        self._control_connection.send(str((*op[:3], self.__self, self.__meeting_list)))
                     else:
-                        self.__meeting_list = op[5]
+                        self.__meeting_list = op[4]
                         self.__getting_list = False
                 elif op[1] == 'AUDIO':
                     if op[4] == 'DISABLE':
@@ -326,6 +326,7 @@ class ClientManager:
                         printf(get_message(SendEvent.UpdateShare, ('',)))
                     else:
                         self.__meeting_list[op[5]]['audio'] = 1
+                        self.start_screen_listener()
                         printf(get_message(SendEvent.UpdateShare, (op[5],)))
             else:
                 pass
