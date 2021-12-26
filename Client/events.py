@@ -1,6 +1,6 @@
 import os
 from enum import Enum, unique
-from typing import Any, Text, Union, Any, Tuple
+from typing import Any, Text, Union, Any, Tuple, List
 
 buf: str = ""
 
@@ -67,20 +67,25 @@ def printf(data: Text) -> None:
     # os.write(2, bytes(data.encode('utf-8')))
 
 
-def scanf() -> Tuple[Union[ReceiveEvent, None], Any]:
+def scanf() -> List[Tuple[Union[ReceiveEvent, None], Any]]:
+    ans: List[Tuple[Union[ReceiveEvent, None], Any]] = []
     try:
         global buf
         data = os.read(0, 4096).decode('utf-8').strip()
         buf += data
-        pos = buf.find('@@@@')
-        if pos == -1:
-            return None, None
-        else:
-            ans = buf[: pos].split('||||')
-            buf = buf[pos + 4:]
-            return ReceiveEvent(ans[0]), ans[1:]
+        while True:
+            pos = buf.find('@@@@')
+            if pos == -1:
+                return ans
+            else:
+                tmp = buf[: pos].split('||||')
+                buf = buf[pos + 4:]
+                try:
+                    ans.append((ReceiveEvent(tmp[0]), tmp[1:]))
+                except Exception:
+                    ans.append((None, None))
     except Exception:
-        return None, None
+        return ans
 
 
 @unique

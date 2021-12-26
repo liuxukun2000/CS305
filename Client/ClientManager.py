@@ -216,7 +216,7 @@ class ClientManager:
 
     def get_member(self) -> str:
         return '||||'.join('####'.join((_, str(self.get_level(i['is_owner'], i['is_admin'])),
-                                        str(max(self.__audio_status, 0)))) for _, i in self.__meeting_list.items())
+                                        str(max(i['audio'], 0)))) for _, i in self.__meeting_list.items())
 
     def control_FSA(self):
         """
@@ -306,14 +306,14 @@ class ClientManager:
                     if op[4] == 'DISABLE':
                         if op[5] == self.__username:
                             self.__audio_status = -1
-                            printf(get_message(SendEvent.UpdateAudio, ('false',)))
+                            printf(get_message(SendEvent.UpdateAudio, ('0',)))
                         self.__meeting_list[op[5]]['audio'] = 0
                     else:
                         if op[5] == self.__username:
                             if self.__audio_status == -1:
                                 self.__audio_status = 0
                                 self.__meeting_list[op[5]]['audio'] = 0
-                            printf(get_message(SendEvent.UpdateAudio, ('true' if self.__audio_status else 'false',)))
+                            printf(get_message(SendEvent.UpdateAudio, (str(max(self.__audio_status, 0)),)))
                         else:
                             self.__meeting_list[op[5]]['audio'] = 1
                     debug('++++++++\n')
@@ -458,7 +458,7 @@ class ClientManager:
                 printf(get_message(SendEvent.Failed, ()))
                 return
         printf(get_message(SendEvent.Okay, ()))
-        if self.__audio_status:
+        if self.__video_status:
             self._control_connection.send(str(('MEETING', 'VIDEO', self.__token, self.__self, 'DISABLE', self.__username)))
         self._control_connection.send(str(('MEETING', 'LEAVE', self.__token, self.__self, self.__username)))
         time.sleep(1)
@@ -498,19 +498,26 @@ class ClientManager:
     def change_audio(self, name: str):
         if name == self.__username:
             if self.__audio_status == -1:
-                printf(get_message(SendEvent.Failed, ()))
+                printf(get_message(SendEvent.Failed, ("您已被禁言，请稍候再试！",)))
                 return
             else:
                 self.__audio_status = 1 - self.__audio_status
                 self.__meeting_list[self.__username]['audio'] = self.__audio_status
-        if self.__audio_status == 1:
+        else:
+            if self.__is_admin or self.__is_owner:
+                if self.__meeting_list[name]['audio'] == 1:
+                    self.__meeting_list[name]['audio'] = 1 - self.__meeting_list[name]['audio']
+            else:
+                printf(get_message(SendEvent.Failed, ()))
+                return
+        if self.__meeting_list[name]['audio'] == 1:
             self._control_connection.send(
-                str(('MEETING', 'AUDIO', self.__token, self.__self, 'ENABLE', self.__username)))
+                str(('MEETING', 'AUDIO', self.__token, self.__self, 'ENABLE', name)))
         else:
             self._control_connection.send(
-                str(('MEETING', 'AUDIO', self.__token, self.__self, 'DISABLE', self.__username)))
+                str(('MEETING', 'AUDIO', self.__token, self.__self, 'DISABLE', name)))
         printf(get_message(SendEvent.Okay, ()))
-        printf(get_message(SendEvent.UpdateAudio, ('true' if self.__audio_status else 'false',)))
+        printf(get_message(SendEvent.UpdateAudio, (str(max(self.__audio_status, 0)),)))
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_video(self):
@@ -607,11 +614,12 @@ if __name__ == '__main__':
         ReceiveEvent.JoinMeeting: manager.join_meeting
     }
     while True:
-        event, data = scanf()
+        ans = scanf()
         # os.write(2, b'rec')
-        if not event:
-            continue
-        FUNCTIONHASH[event](*data)
+        for event, data in ans:
+            if not event:
+                continue
+            FUNCTIONHASH[event](*data)
         # os.write(2, b'done')
     #
     #
