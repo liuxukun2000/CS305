@@ -445,6 +445,11 @@ class ClientManager:
             video=0,
             audio=audio
         )
+        for i, j in self.__meeting_list.items():
+            if j['video']:
+                self.__video_sharer = i
+                self.start_screen_listener()
+                break
         printf(get_message(SendEvent.Okay, ()))
         time.sleep(3)
         printf(get_message(SendEvent.UpdateInfo, (self.__token, self.__username)))
@@ -453,6 +458,8 @@ class ClientManager:
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
         if audio:
             printf(get_message(SendEvent.UpdateAudio, (str(1),)))
+        if self.__video_sharer:
+            printf(get_message(SendEvent.UpdateShare, (self.__video_sharer,)))
 
     def leave_meeting(self, name: str):
         if name != self.__username:

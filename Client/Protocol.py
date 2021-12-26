@@ -30,10 +30,6 @@ class ClientProtocol(QuicConnectionProtocol):
         self._cache: List[bytes] = [b'' for i in range(256)]
         super(ClientProtocol, self).__init__(*args, **kwargs)
 
-    @property
-    def connected(self) -> bool:
-        return self._connect
-
     def set_queue(self, queue: Queue) -> None:
         self.__queue = queue
 
