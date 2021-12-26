@@ -113,7 +113,7 @@ class ClientManager:
         self.__getting_list = True
         self.__meeting_list = dict()
         self.__is_owner = self.__is_admin = False
-        self.__audio_status: int = -1  # -1 force 0 disable 1 enable
+        self.__audio_status: int = 0  # -1 force 0 disable 1 enable
         self.__video_status: int = 0  # 0 down 1 up
         self.__video_sharer: str = ''
         self.__check = False
@@ -354,7 +354,6 @@ class ClientManager:
                             return
                         self.__meeting_list.pop(op[4])
                         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
-
                     if op[4] == self.__username:
                         printf(get_message(SendEvent.ForceExit, ('force',)))
                         self.stop()
@@ -450,12 +449,14 @@ class ClientManager:
         if name != self.__username:
             if not self.__is_owner and not self.__is_admin:
                 printf(get_message(SendEvent.Failed, ()))
-        data = dict(token=self.__token)
-        response = self._session.post(url=self._url('/deletemeeting/'), data=data)
-        data = response.json()
-        if data.get('status', 500) != 200:
-            printf(get_message(SendEvent.Failed, ()))
-            return
+                return
+        if self.__is_owner and name == self.__username:
+            data = dict(token=self.__token)
+            response = self._session.post(url=self._url('/deletemeeting/'), data=data)
+            data = response.json()
+            if data.get('status', 500) != 200:
+                printf(get_message(SendEvent.Failed, ()))
+                return
         printf(get_message(SendEvent.Okay, ()))
         if self.__audio_status:
             self._control_connection.send(str(('MEETING', 'VIDEO', self.__token, self.__self, 'DISABLE', self.__username)))
