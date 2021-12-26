@@ -92,7 +92,6 @@ class ScreenManager(Base):
             # time.sleep(3)
 
 
-
 class ScreenReceiver(Base):
     def __init__(self, ID: str, event: Event, _x: int = 1920, _y: int = 1080) -> None:
         super(ScreenReceiver, self).__init__(ID, event)
@@ -110,6 +109,9 @@ class ScreenReceiver(Base):
         while not self.event.is_set():
             image = zlib.decompress(self.__queue.get())
             # image = self.__queue.get()
+            if self.__queue.qsize() >= 12:
+                _ = self.__queue.get()
+                continue
             # print('receive image')
             self._num += 1
             image = cv2.resize(pickle.loads(image), (self.__x, self.__y))
@@ -120,7 +122,7 @@ class ScreenReceiver(Base):
             # image = cv2.resize(cv2.imdecode(image, 1), (self.__x, self.__y))
             # printf(get_message(SendEvent.ScreenImage, (str(base64.b64encode(image)), str(self.client.delay))))
             os.write(1, b'screen-image||||' + base64.b64encode(image) + b'||||' +
-                   bytes(str(self.client.delay).encode('utf-8')) + b'@@@@')
+                     bytes(str(self.client.delay).encode('utf-8')) + b'@@@@')
             # sys.stdout.flush()
 
             # with open(f"{self._num}.txt", 'w') as f:
@@ -129,6 +131,7 @@ class ScreenReceiver(Base):
             debug(f"Receive {self._num} images in {time.time() - self._start} s")
         printf(get_message(SendEvent.EndControl, ()))
         debug('image--------------shut------------------down')
+
 
 class SimpleReceiver(Base):
     def __init__(self, ID: str, event: Event) -> None:

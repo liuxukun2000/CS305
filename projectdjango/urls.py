@@ -25,5 +25,7 @@ urlpatterns = [
     path('listen/', listen),
     path('changetoken/', change_token),
     path('createmeeting/', create_meeting),
-    path('checkmeeting/', check_meeting)
+    path('checkmeeting/', check_meeting),
+    path('deletemeeting/', delete_meeting),
+    path('changeowner/', change_owner)
 ]

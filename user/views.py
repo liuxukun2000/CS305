@@ -112,3 +112,25 @@ def check_meeting(request: HttpRequest):
                 owner = meeting[0].create_user.username == request.session['username']
                 return JsonResponse(dict(status=200, is_owner=owner))
     return JsonResponse(dict(status=403))
+
+
+def delete_meeting(request: HttpRequest):
+    if request.session.get('is_login'):
+        _id = request.POST.get('token', '')
+        if _id:
+            user = User.objects.get(username=request.session['username'])
+            Meeting.objects.filter(meeting_id=_id, create_user=user).delete()
+            return JsonResponse(dict(status=200))
+    return JsonResponse(dict(status=403))
+
+
+def change_owner(request: HttpRequest):
+    if request.session.get('is_login'):
+        _id = request.POST.get('token', '')
+        newname = request.POST.get('username', '')
+        if _id and newname:
+            user = User.objects.get(username=request.session['username'])
+            newuser = User.objects.get(username=newname)
+            Meeting.objects.filter(meeting_id=_id, create_user=user).update(create_user=newuser)
+            return JsonResponse(dict(status=200))
+    return JsonResponse(dict(status=403))
