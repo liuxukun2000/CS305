@@ -308,7 +308,7 @@ class ClientManager:
                             self.__audio_status = -1
                             printf(get_message(SendEvent.UpdateAudio, ('0',)))
                         self.__meeting_list[op[5]]['audio'] = 0
-                    else:
+                    elif op[4] == 'ENABLE':
                         if op[5] == self.__username:
                             if self.__audio_status == -1:
                                 self.__audio_status = 0
@@ -316,6 +316,11 @@ class ClientManager:
                             printf(get_message(SendEvent.UpdateAudio, (str(max(self.__audio_status, 0)),)))
                         else:
                             self.__meeting_list[op[5]]['audio'] = 1
+                    else:
+                        if op[5] == self.__username:
+                            if self.__audio_status == -1:
+                                self.__audio_status = 0
+                                self.__meeting_list[op[5]]['audio'] = 0
                     debug('++++++++\n')
                     debug(self.get_member())
                     debug('++++++++\n')
@@ -499,8 +504,9 @@ class ClientManager:
         printf(get_message(SendEvent.Okay, ()))
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
-    def change_audio(self, name: str):
+    def change_audio(self, name: str, others: str = 'false'):
         op = 0
+        others = False if others == 'false' else True
         if name == self.__username:
             if self.__audio_status == -1:
                 printf(get_message(SendEvent.Failed, ("您已被禁言，请稍候再试！",)))
@@ -512,19 +518,22 @@ class ClientManager:
         else:
             if self.__is_admin or self.__is_owner:
                 if self.__meeting_list[name]['audio'] == 1:
-                    self.__meeting_list[name]['audio'] = 1 - self.__meeting_list[name]['audio']
+                    self.__meeting_list[name]['audio'] = 0
                     op = 0
                 else:
-                    op = 1
+                    op = 2
             else:
                 printf(get_message(SendEvent.Failed, ()))
                 return
         if op == 1:
             self._control_connection.send(
                 str(('MEETING', 'AUDIO', self.__token, self.__self, 'ENABLE', name)))
-        else:
+        elif op == 0:
             self._control_connection.send(
                 str(('MEETING', 'AUDIO', self.__token, self.__self, 'DISABLE', name)))
+        else:
+            self._control_connection.send(
+                str(('MEETING', 'AUDIO', self.__token, self.__self, 'SET', name)))
         printf(get_message(SendEvent.Okay, ()))
         printf(get_message(SendEvent.UpdateAudio, (str(max(self.__audio_status, 0)),)))
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
