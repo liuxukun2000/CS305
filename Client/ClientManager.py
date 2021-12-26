@@ -457,6 +457,8 @@ class ClientManager:
             printf(get_message(SendEvent.Failed, ()))
             return
         printf(get_message(SendEvent.Okay, ()))
+        if self.__audio_status:
+            self._control_connection.send(str(('MEETING', 'VIDEO', self.__token, self.__self, 'DISABLE', self.__username)))
         self._control_connection.send(str(('MEETING', 'LEAVE', self.__token, self.__self, self.__username)))
         time.sleep(1)
         self.reset_meeting()
