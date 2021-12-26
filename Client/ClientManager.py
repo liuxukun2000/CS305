@@ -329,13 +329,15 @@ class ClientManager:
                         if op[5] == self.__username:
                             self.__is_owner = True
                             printf(get_message(SendEvent.UpdateLevel, (2,)))
+                    printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
                 elif op[1] == 'ADMIN':
                     if self.__meeting_list[op[4]]['is_owner']:
                         self.__meeting_list[op[5]]['is_admin'] = not self.__meeting_list[op[5]]['is_admin']
                         if op[5] == self.__username:
                             self.__is_admin = not self.__is_admin
                             printf(
-                                get_message(SendEvent.UpdateLevel, (self.get_level(self.__is_owner, self.__is_admin),)))
+                                get_message(SendEvent.UpdateLevel, (str(self.get_level(self.__is_owner, self.__is_admin)),)))
+                        printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
                 elif op[1] == 'JOIN':
                     if op[4] in self.__meeting_list:
                         continue
@@ -444,6 +446,8 @@ class ClientManager:
         printf(get_message(SendEvent.UpdateLevel, (str(self.get_level(self.__is_owner, self.__is_admin)),)))
         self._control_connection.send(str(('MEETING', 'JOIN', self.__token, self.__self, self.__username, audio)))
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
+        if audio:
+            printf(get_message(SendEvent.UpdateAudio, (str(1),)))
 
     def leave_meeting(self, name: str):
         if name != self.__username:
@@ -458,9 +462,9 @@ class ClientManager:
                 printf(get_message(SendEvent.Failed, ()))
                 return
         printf(get_message(SendEvent.Okay, ()))
-        if self.__video_status:
-            self._control_connection.send(str(('MEETING', 'VIDEO', self.__token, self.__self, 'DISABLE', self.__username)))
-        self._control_connection.send(str(('MEETING', 'LEAVE', self.__token, self.__self, self.__username)))
+        if self.__meeting_list[name]['video']:
+            self._control_connection.send(str(('MEETING', 'VIDEO', self.__token, self.__self, 'DISABLE', name)))
+        self._control_connection.send(str(('MEETING', 'LEAVE', self.__token, self.__self, name)))
         time.sleep(1)
         self.reset_meeting()
         if self.__screen_process:
@@ -483,7 +487,7 @@ class ClientManager:
         self.__meeting_list[new_name]['is_owner'] = True
 
         printf(get_message(SendEvent.Okay, ()))
-        printf(get_message(SendEvent.UpdateLevel, (0,)))
+        printf(get_message(SendEvent.UpdateLevel, ('0',)))
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_admin(self, name: str):
@@ -496,21 +500,26 @@ class ClientManager:
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_audio(self, name: str):
+        op = 0
         if name == self.__username:
             if self.__audio_status == -1:
                 printf(get_message(SendEvent.Failed, ("您已被禁言，请稍候再试！",)))
                 return
             else:
                 self.__audio_status = 1 - self.__audio_status
+                op = self.__audio_status
                 self.__meeting_list[self.__username]['audio'] = self.__audio_status
         else:
             if self.__is_admin or self.__is_owner:
                 if self.__meeting_list[name]['audio'] == 1:
                     self.__meeting_list[name]['audio'] = 1 - self.__meeting_list[name]['audio']
+                    op = 0
+                else:
+                    op = 1
             else:
                 printf(get_message(SendEvent.Failed, ()))
                 return
-        if self.__meeting_list[name]['audio'] == 1:
+        if op == 1:
             self._control_connection.send(
                 str(('MEETING', 'AUDIO', self.__token, self.__self, 'ENABLE', name)))
         else:
