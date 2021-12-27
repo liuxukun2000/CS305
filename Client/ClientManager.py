@@ -667,7 +667,7 @@ class ClientManager:
         printf(get_message(SendEvent.Okay, ()))
 
     def stop(self):
-        self.__event.set()
+        # self.__event.set()
         if self.__screen_process:
             self.__screen_process.terminate()
             self.__screen_process.kill()
@@ -678,13 +678,18 @@ class ClientManager:
         printf(get_message(SendEvent.Okay, ()))
 
     def stop_control(self):
-        self.__event.set()
+        # self.__event.set()
         if self.__screen_process:
             self.__screen_process.terminate()
             self.__screen_process.kill()
         if self.__simple_process:
             self.__simple_process.terminate()
             self.__simple_process.kill()
+        try:
+            keyboard.unhook_all()
+            mouse.unhook_all()
+        except Exception:
+            pass
         self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
         printf(get_message(SendEvent.Okay, ()))
 

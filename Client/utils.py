@@ -4,7 +4,7 @@ import pickle
 import sys
 import time
 import zlib
-from multiprocessing import Process, Event
+from multiprocessing import Process, Event, Queue
 from threading import Thread
 import base64
 from typing import Union, Sequence
@@ -227,13 +227,26 @@ class AudioReceiver(Base):
     def __init__(self, ID: str, event: Event, ) -> None:
         super(AudioReceiver, self).__init__(ID, event)
         self.__queue = None
+        self.__threads = 4
+
+    @staticmethod
+    def play(queue: Queue):
+        while True:
+            data = queue.get()
+            sd.play(data, RATE)
 
     def start(self) -> None:
         self.init()
+        queues: List[Queue] = [Queue() for i in range(self.__threads)]
+        pool: List[Thread] = [Thread(target=self.play, args=(queues[i],)) for i in range(self.__threads)]
+        for i in pool:
+            i.setDaemon(True)
+            i.start()
         print('receive in')
         self.__queue = self.client.queue
-
+        tmp = 0
         while not self.event.is_set():
             data = pickle.loads(zlib.decompress(self.__queue.get()))
-            sd.play(data, RATE)
+            queues[tmp % self.__threads].put(data)
+            tmp += 1
         debug('audio--------------shut------------------down')
