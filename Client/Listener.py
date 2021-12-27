@@ -171,21 +171,26 @@ class AudioListener(threading.Thread):
 
 
 if __name__ == '__main__':
-    image = cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR)
-    image = cv2.resize(image, (640, 360))
-    image = zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION)
-    print(len(image), struct.pack("L", len(image)))
+    start = time.time()
+    for i in range(30):
+        image = cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR)
+        image = cv2.resize(image, (1280, 720))
+        image = zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION)
+    print(time.time() - start)
+
+
+    # print(len(image), struct.pack("L", len(image)))
 
     # self.client.send(struct.pack("L", len(image)) + image)
-    print(struct.calcsize("L"))
-    ans = struct.pack("L", 130010)
-    print(ans, len(ans))
-    ans = ans + ans
-    ans = ans + ans
-    ans = ans + ans
-
-    y = struct.unpack("L", ans[:8])
-    print(y, ans[:8])
+    # print(struct.calcsize("L"))
+    # ans = struct.pack("L", 130010)
+    # print(ans, len(ans))
+    # ans = ans + ans
+    # ans = ans + ans
+    # ans = ans + ans
+    #
+    # y = struct.unpack("L", ans[:8])
+    # print(y, ans[:8])
 
     # image = cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR)
     # image = cv2.resize(image, (1280, 720))

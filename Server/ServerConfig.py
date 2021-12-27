@@ -1,5 +1,4 @@
 from typing import Dict, Optional
-
 from aioquic.quic.connection import QuicConfiguration
 from aioquic.quic.logger import QuicLogger
 from aioquic.tls import SessionTicket
@@ -23,5 +22,5 @@ class SessionTicketStore:
 class ServerConfig(QuicConfiguration):
     def __init__(self):
         super(ServerConfig, self).__init__(is_client=False, max_datagram_frame_size=165536, quic_logger=QuicLogger())
-        self.load_cert_chain("/home/satan/桌面/计网/Project/Server/fullchain.pem",
-                             "/home/satan/桌面/计网/Project/Server/privkey.pem")
+        self.load_cert_chain("/run/media/satan/DATA/projectdjango/Server/fullchain.pem",
+                             "/run/media/satan/DATA/projectdjango/Server/privkey.pem")

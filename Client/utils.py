@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import pickle
 import sys
 import time
@@ -7,6 +8,8 @@ from multiprocessing import Process, Event
 from threading import Thread
 import base64
 from typing import Union, Sequence
+from io import BytesIO
+import sounddevice as sd
 from PIL import ImageEnhance, Image
 import keyboard
 import pyautogui
@@ -18,6 +21,16 @@ from PIL import ImageGrab
 
 from Listener import MouseListener, KeyboardListener
 from Protocol import Client
+
+CHUNK = 1024
+CHANNELS = 1
+RATE = 44100
+RECORD_SECONDS = 0.5
+
+
+def start_loop(loop: asyncio.BaseEventLoop):
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
 
 
 def LISTEN(ID: str) -> str:
@@ -82,10 +95,13 @@ class ScreenManager(Base):
     def start(self) -> None:
         self.init()
         while not self.event.is_set():
-            image = cv2.resize(cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR), (self.__x, self.__y))
+            image = ImageGrab.grab()
+            image = image.resize((1920, 1080), Image.ANTIALIAS)
+            image = cv2.cvtColor(numpy.asarray(image), cv2.COLOR_RGB2BGR)
+            # image = cv2.resize(cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR), (self.__x, self.__y))
             self._num += 1
 
-            # self.client.send(zlib.compress(cv2.imencode('.jpg', image)[1], zlib.Z_BEST_COMPRESSION))
+            # self.client.send(zlib.compress(cv2.imencode('.jpeg', image)[1], zlib.Z_BEST_COMPRESSION))
             self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
             # self.client.send(pickle.dumps(image))
             print(f"Send {self._num} images in {time.time() - self._start} s")
@@ -164,3 +180,32 @@ class SimpleReceiver(Base):
 
 def get_process(manager: Base) -> Process:
     return Process(target=manager.start)
+
+
+class AudioManager(Base):
+    def __init__(self, ID: str, event: Event) -> None:
+        super(AudioManager, self).__init__(ID, event)
+        self.__queue = None
+
+    def start(self) -> None:
+        self.init()
+        while not self.event.is_set():
+            myrecording = sd.rec(int(RECORD_SECONDS * RATE), samplerate=RATE, channels=1)
+            sd.wait()
+            self.client.send(zlib.compress(pickle.dumps(myrecording), zlib.Z_BEST_COMPRESSION))
+
+
+class AudioReceiver(Base):
+    def __init__(self, ID: str, event: Event, ) -> None:
+        super(AudioReceiver, self).__init__(ID, event)
+        self.__queue = None
+
+    def start(self) -> None:
+        self.init()
+        print('receive in')
+        self.__queue = self.client.queue
+
+        while not self.event.is_set():
+            data = pickle.loads(zlib.decompress(self.__queue.get()))
+            sd.play(data, RATE)
+        debug('audio--------------shut------------------down')

@@ -21,10 +21,14 @@ URL = "http://oj.sustech.xyz:8000"
 class ClientManager:
     def __init__(self) -> None:
         self.__event = Event()
+        self.__audio_in_event = Event()
+        self.__audio_out_event = Event()
         self.__simple_manager: Union[SimpleManager, None] = None
         self.__screen_manager: Union[ScreenManager, None] = None
         self.__simple_receiver: Union[SimpleReceiver, None] = None
         self.__screen_receiver: Union[ScreenReceiver, None] = None
+        self.__audio_receiver: Union[AudioReceiver, None] = None
+        self.__audio_manager: Union[AudioManager, None] = None
 
         self._mode: ClientMode = ClientMode.INIT
         self._session = requests.Session()
@@ -36,6 +40,9 @@ class ClientManager:
 
         self.__simple_process: Union[Process, None] = None
         self.__screen_process: Union[Process, None] = None
+        self.__audio_process_in: Union[Process, None] = None
+        self.__audio_process_out: Union[Process, None] = None
+
         self.__control_thread: Union[Thread, None] = Thread(target=self.control_FSA)
         self.__control_thread.setDaemon(True)
         self.__control_thread.start()
@@ -260,6 +267,7 @@ class ClientManager:
                         self.__simple_process.start()
                         self.__screen_process.start()
                         self._control_connection.send(str(('CONTROL', 'START', 'DONE', self.__token, self.__self)))
+                        printf(get_message(SendEvent.StartControl, ()))
                         self._mode = ClientMode.LISTENER
                     else:
                         if self.__screen_process:
@@ -276,6 +284,7 @@ class ClientManager:
                         self.__screen_process.start()
                         self._mode = ClientMode.CONTROLLER
                 else:
+                    printf(get_message(SendEvent.EndControl, ()))
                     if self.__screen_process:
                         self.__screen_process.terminate()
                         self.__screen_process.kill()
@@ -306,6 +315,7 @@ class ClientManager:
                     if op[4] == 'DISABLE':
                         if op[5] == self.__username:
                             self.__audio_status = -1
+                            self.clear_audio(out_only=True)
                             printf(get_message(SendEvent.UpdateAudio, ('0',)))
                         self.__meeting_list[op[5]]['audio'] = 0
                     elif op[4] == 'ENABLE':
@@ -316,6 +326,7 @@ class ClientManager:
                             printf(get_message(SendEvent.UpdateAudio, (str(max(self.__audio_status, 0)),)))
                         else:
                             self.__meeting_list[op[5]]['audio'] = 1
+                            # self.start_audio_manager()
                     else:
                         if op[5] == self.__username:
                             if self.__audio_status == -1:
@@ -366,15 +377,48 @@ class ClientManager:
                         self.stop()
                         return
                 elif op[1] == 'VIDEO':
+                    if self.__screen_process:
+                        self.__screen_process.terminate()
+                        self.__screen_process.kill()
                     if op[4] == 'DISABLE':
-                        self.__meeting_list[op[5]]['audio'] = 0
+                        self.__meeting_list[op[5]]['video'] = 0
                         printf(get_message(SendEvent.UpdateShare, ('',)))
                     else:
-                        self.__meeting_list[op[5]]['audio'] = 1
+                        self.__meeting_list[op[5]]['video'] = 1
                         self.start_screen_listener()
                         printf(get_message(SendEvent.UpdateShare, (op[5],)))
             else:
                 pass
+
+    def clear_audio(self, out_only: bool = True):
+        if self.__audio_process_out:
+            self.__audio_out_event.set()
+            time.sleep(1)
+            self.__audio_out_event = Event()
+            self.__audio_process_out.terminate()
+            self.__audio_process_out.kill()
+        if out_only:
+            return
+        if self.__audio_process_in:
+            self.__audio_in_event.set()
+            time.sleep(1)
+            self.__audio_in_event = Event()
+            self.__audio_process_in.terminate()
+            self.__audio_process_in.kill()
+
+    def start_audio_manager(self):
+        self.__audio_manager = AudioManager(self.__token, self.__audio_out_event)
+        self.__audio_manager.init_msg = LISTEN(f"{self.__token}_audio")
+        self.__audio_process_out = get_process(self.__audio_manager)
+        self.__audio_process_out.daemon = True
+        self.__audio_process_out.start()
+
+    def start_audio_listener(self):
+        self.__audio_receiver = AudioReceiver(self.__token, self.__audio_in_event)
+        self.__audio_receiver.init_msg = CONTROL(f"{self.__token}_audio")
+        self.__audio_process_in = get_process(self.__audio_receiver)
+        self.__audio_process_in.daemon = True
+        self.__audio_process_in.start()
 
     def start_screen_manager(self):
         self.__screen_manager = ScreenManager(self.__token, self.__event)
@@ -458,6 +502,8 @@ class ClientManager:
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
         if audio:
             printf(get_message(SendEvent.UpdateAudio, (str(1),)))
+            self.start_audio_manager()
+        self.start_audio_listener()
         if self.__video_sharer:
             printf(get_message(SendEvent.UpdateShare, (self.__video_sharer,)))
 
@@ -482,6 +528,7 @@ class ClientManager:
         if self.__screen_process:
             self.__screen_process.terminate()
             self.__screen_process.kill()
+        self.clear_audio()
 
     def change_owner(self, new_name: str):
         if not self.__is_owner:
@@ -535,9 +582,13 @@ class ClientManager:
         if op == 1:
             self._control_connection.send(
                 str(('MEETING', 'AUDIO', self.__token, self.__self, 'ENABLE', name)))
+            if name == self.__username:
+                self.start_audio_manager()
         elif op == 0:
             self._control_connection.send(
                 str(('MEETING', 'AUDIO', self.__token, self.__self, 'DISABLE', name)))
+            if name == self.__username:
+                self.clear_audio(out_only=True)
         else:
             self._control_connection.send(
                 str(('MEETING', 'AUDIO', self.__token, self.__self, 'SET', name)))
@@ -593,6 +644,14 @@ class ClientManager:
         if self.__screen_process:
             self.__screen_process.terminate()
             self.__screen_process.kill()
+        self.clear_audio()
+        printf(get_message(SendEvent.Okay, ()))
+
+    def stop_control(self):
+        self.__event.set()
+        if self.__screen_process:
+            self.__screen_process.terminate()
+            self.__screen_process.kill()
         printf(get_message(SendEvent.Okay, ()))
 
 
@@ -627,7 +686,7 @@ if __name__ == '__main__':
         ReceiveEvent.RefreshCode: manager.change_token,
         ReceiveEvent.UserRegister: manager.register,
         ReceiveEvent.CreateMeeting: manager.create_meeting,
-        ReceiveEvent.TerminateControl: manager.stop,
+        ReceiveEvent.TerminateControl: manager.stop_control,
         ReceiveEvent.ExitMeeting: manager.leave_meeting,
         ReceiveEvent.StartShare: manager.change_video,
         ReceiveEvent.EndShare: manager.change_video,
@@ -636,7 +695,8 @@ if __name__ == '__main__':
         ReceiveEvent.SendMessage: manager.send_message,
         ReceiveEvent.SetAdmin: manager.change_admin,
         ReceiveEvent.GiveHost: manager.change_owner,
-        ReceiveEvent.JoinMeeting: manager.join_meeting
+        ReceiveEvent.JoinMeeting: manager.join_meeting,
+        ReceiveEvent.ConfirmExit: manager.stop
     }
     while True:
         ans = scanf()

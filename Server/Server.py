@@ -7,6 +7,7 @@ from aioquic.asyncio import *
 from aioquic.quic.events import QuicEvent, StreamDataReceived, ConnectionTerminated
 import redis
 from ServerConfig import ServerConfig
+from multiprocessing import Event, Process
 
 
 def start_loop(loop: asyncio.BaseEventLoop):
@@ -121,18 +122,49 @@ class ServerProtocol(QuicConnectionProtocol):
         self.transmit()
         await asyncio.sleep(0.0001)
 
-
-if __name__ == '__main__':
+def run(_event: Event):
+    print('start')
     loop = asyncio.get_event_loop()
+    t = threading.Thread(target=start_loop, args=(loop,))
+    t.setDaemon(True)
+    t.start()
     configuration = ServerConfig()
-
-    x = loop.run_until_complete(serve(
+    asyncio.run_coroutine_threadsafe(serve(
         host="0.0.0.0",
         port=8080,
         configuration=configuration,
         create_protocol=ServerProtocol,
-    ))
+    ), loop)
+    # x = loop.run_until_complete(serve(
+    #     host="0.0.0.0",
+    #     port=8080,
+    #     configuration=configuration,
+    #     create_protocol=ServerProtocol,
+    # ))
+    _event.wait()
+    print('end')
+
+if __name__ == '__main__':
+    event = Event()
+    pro = []
+    num = 8
+    for i in range(num):
+        pro.append(Process(target=run, args=(event,)))
+        print(i)
+        pro[i].daemon = True
+        pro[i].start()
+        # time.sleep(0.5)
+
     try:
-        loop.run_forever()
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
-        pass
+        event.set()
+    time.sleep(1)
+    print('killing')
+    for i in range(num):
+        pro[i].terminate()
+        pro[i].kill()
+
+
+

@@ -51,7 +51,12 @@ class SendEvent(Enum):
     Okay = 'okay'
     Failed = 'failed'
     ScreenImage = 'screen-image'
+
     EndControl = 'end-control'
+
+    StartControl = 'start-control'
+    SwitchVideo = 'switch-video'
+
 
     UpdateLevel = 'update-level'  # 0/1/2
     UpdateShare = 'update-share'  # username/''
