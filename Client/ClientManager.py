@@ -640,6 +640,7 @@ class ClientManager:
 
     def stop_control_listen(self):
         self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
+        printf(get_message(SendEvent.Okay, ()))
 
     def change_video_out(self, op: str):
         op = not bool(int(op))
@@ -658,6 +659,9 @@ class ClientManager:
         if self.__screen_process:
             self.__screen_process.terminate()
             self.__screen_process.kill()
+        if self.__simple_process:
+            self.__simple_process.terminate()
+            self.__simple_process.kill()
         self.clear_audio()
         printf(get_message(SendEvent.Okay, ()))
 
@@ -719,7 +723,9 @@ if __name__ == '__main__':
         for event, data in ans:
             if not event:
                 continue
+            debug(event.value + '\n')
             FUNCTIONHASH[event](*data)
+            debug('\n')
             if event == ReceiveEvent.ConfirmExit:
                 printf(get_message(SendEvent.Okay, ()))
                 sys.exit(0)

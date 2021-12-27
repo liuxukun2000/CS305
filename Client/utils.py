@@ -102,34 +102,32 @@ class ScreenManager(Base):
         if screen or not op:
             while not self.event.is_set():
                 start = time.time()
-                for i in range(4):
-                    image = ImageGrab.grab()
-                    image = image.resize((1920, 1080), Image.ANTIALIAS)
-                    image = cv2.cvtColor(numpy.asarray(image), cv2.COLOR_RGB2BGR)
-                    # image = cv2.resize(cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR), (self.__x, self.__y))
-                    self._num += 1
 
-                    # self.client.send(zlib.compress(cv2.imencode('.jpeg', image)[1], zlib.Z_BEST_COMPRESSION))
-                    self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
-                    # self.client.send(pickle.dumps(image))
-                    debug(f"Send {self._num} images in {time.time() - self._start} s")
-                _ = round(time.time() - start, 2)
+                image = ImageGrab.grab()
+                image = cv2.cvtColor(numpy.asarray(image.resize((1920, 1080), Image.ANTIALIAS)), cv2.COLOR_RGB2BGR)
+                # image = cv2.resize(cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR), (self.__x, self.__y))
+                self._num += 1
+                # self.client.send(zlib.compress(cv2.imencode('.jpeg', image)[1], zlib.Z_BEST_COMPRESSION))
+                self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
+                # self.client.send(pickle.dumps(image))
+                debug(f"Send {self._num} images in {time.time() - self._start} s")
+                _ = round(0.25 - time.time() + start, 2)
                 if _ > 0:
                     time.sleep(_)
-
                 # time.sleep(3)
         else:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 360)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
             while not self.event.is_set():
                 start = time.time()
-                for i in range(4):
-                    _, image = cap.read()
-                    if not _:
-                        break
-                    self._num += 1
-                    self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
-                    # self.client.send(pickle.dumps(image))
-                    debug(f"Send {self._num} images in {time.time() - self._start} s")
-                _ = round(time.time() - start, 2)
+                _, image = cap.read()
+                if not _:
+                    break
+                self._num += 1
+                self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
+                # self.client.send(pickle.dumps(image))
+                debug(f"Send {self._num} images in {time.time() - self._start} s")
+                _ = round(0.2 - time.time() + start, 2)
                 if _ > 0:
                     time.sleep(_)
 
