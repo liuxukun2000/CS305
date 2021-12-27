@@ -52,7 +52,7 @@ class Base:
     def id(self) -> str:
         return self.__id
 
-    def stop(self) -> None:
+    def stop(self) -> No__meeting_listne:
         self.event.set()
 
     def init(self) -> None:
@@ -92,20 +92,41 @@ class ScreenManager(Base):
         self._num = 0
         self._start = time.time()
 
-    def start(self) -> None:
+    def start(self, screen: bool = True) -> None:
         self.init()
-        while not self.event.is_set():
-            image = ImageGrab.grab()
-            image = image.resize((1920, 1080), Image.ANTIALIAS)
-            image = cv2.cvtColor(numpy.asarray(image), cv2.COLOR_RGB2BGR)
-            # image = cv2.resize(cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR), (self.__x, self.__y))
-            self._num += 1
+        op = True
+        cap = None
+        if not screen:
+            cap = cv2.VideoCapture(0)
+            op = cap.isOpened()
+        if screen or not op:
+            while not self.event.is_set():
+                start = time.time()
+                for i in range(4):
+                    image = ImageGrab.grab()
+                    image = image.resize((1920, 1080), Image.ANTIALIAS)
+                    image = cv2.cvtColor(numpy.asarray(image), cv2.COLOR_RGB2BGR)
+                    # image = cv2.resize(cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR), (self.__x, self.__y))
+                    self._num += 1
 
-            # self.client.send(zlib.compress(cv2.imencode('.jpeg', image)[1], zlib.Z_BEST_COMPRESSION))
-            self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
-            # self.client.send(pickle.dumps(image))
-            print(f"Send {self._num} images in {time.time() - self._start} s")
-            # time.sleep(3)
+                    # self.client.send(zlib.compress(cv2.imencode('.jpeg', image)[1], zlib.Z_BEST_COMPRESSION))
+                    self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
+                    # self.client.send(pickle.dumps(image))
+                    print(f"Send {self._num} images in {time.time() - self._start} s")
+                _ = round(time.time() - start, 2)
+                if _ > 0:
+                    time.sleep(_)
+
+                # time.sleep(3)
+        else:
+            while not self.event.is_set():
+                _, image = cap.read()
+                if not _:
+                    break
+                self._num += 1
+                self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
+                # self.client.send(pickle.dumps(image))
+                print(f"Send {self._num} images in {time.time() - self._start} s")
 
 
 class ScreenReceiver(Base):

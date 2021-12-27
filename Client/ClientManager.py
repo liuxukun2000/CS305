@@ -51,6 +51,7 @@ class ClientManager:
 
         self.__audio_status: int = 0  # -1 force 0 disable 1 enable
         self.__video_status: int = 0  # 0 down 1 up
+        self.__screen_video: bool = True
         self.__video_sharer: str = ''
         self.__is_owner: bool = False
         self.__is_admin: bool = False
@@ -119,6 +120,7 @@ class ClientManager:
         self.reset_control()
         self.__getting_list = True
         self.__meeting_list = dict()
+        self.__screen_video = True
         self.__is_owner = self.__is_admin = False
         self.__audio_status: int = 0  # -1 force 0 disable 1 enable
         self.__video_status: int = 0  # 0 down 1 up
@@ -423,7 +425,7 @@ class ClientManager:
     def start_screen_manager(self):
         self.__screen_manager = ScreenManager(self.__token, self.__event)
         self.__screen_manager.init_msg = LISTEN(f"{self.__token}_screen")
-        self.__screen_process = get_process(self.__screen_manager)
+        self.__screen_process = Process(target=self.__screen_receiver, args=(self.__screen_video,))
         self.__screen_process.daemon = True
         self.__screen_process.start()
 
@@ -638,6 +640,18 @@ class ClientManager:
 
     def stop_control_listen(self):
         self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
+
+    def change_video_out(self, op: str):
+        op = not bool(int(op))
+        if self.__screen_video == op:
+            printf(get_message(SendEvent.Okay, ()))
+            return
+        self.__screen_video = op
+        if self.__screen_process:
+            self.__screen_process.terminate()
+            self.__screen_process.kill()
+        self.start_screen_manager()
+        printf(get_message(SendEvent.Okay, ()))
 
     def stop(self):
         self.__event.set()

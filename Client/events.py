@@ -41,6 +41,8 @@ class ReceiveEvent(Enum):
     SetAdmin = 'set-admin'  # username
     GiveHost = 'give-host'  # username
 
+    SwitchVideo = 'switch-video'
+
 
 @unique
 class SendEvent(Enum):
@@ -55,7 +57,7 @@ class SendEvent(Enum):
     EndControl = 'end-control'
 
     StartControl = 'start-control'
-    SwitchVideo = 'switch-video'
+
 
 
     UpdateLevel = 'update-level'  # 0/1/2
