@@ -52,7 +52,7 @@ class Base:
     def id(self) -> str:
         return self.__id
 
-    def stop(self) -> No__meeting_listne:
+    def stop(self) -> None:
         self.event.set()
 
     def init(self) -> None:

@@ -710,7 +710,8 @@ if __name__ == '__main__':
         ReceiveEvent.SetAdmin: manager.change_admin,
         ReceiveEvent.GiveHost: manager.change_owner,
         ReceiveEvent.JoinMeeting: manager.join_meeting,
-        ReceiveEvent.ConfirmExit: manager.stop
+        ReceiveEvent.ConfirmExit: manager.stop,
+        ReceiveEvent.SwitchVideo: manager.change_video_out
     }
     while True:
         ans = scanf()
@@ -720,6 +721,7 @@ if __name__ == '__main__':
                 continue
             FUNCTIONHASH[event](*data)
             if event == ReceiveEvent.ConfirmExit:
+                printf(get_message(SendEvent.Okay, ()))
                 sys.exit(0)
         # os.write(2, b'done')
     #
