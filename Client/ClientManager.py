@@ -706,7 +706,7 @@ if __name__ == '__main__':
                 continue
             FUNCTIONHASH[event](*data)
             if event == ReceiveEvent.ConfirmExit:
-                break
+                sys.exit(0)
         # os.write(2, b'done')
     #
     #
