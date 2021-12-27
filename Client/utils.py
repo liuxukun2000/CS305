@@ -112,7 +112,7 @@ class ScreenManager(Base):
                     # self.client.send(zlib.compress(cv2.imencode('.jpeg', image)[1], zlib.Z_BEST_COMPRESSION))
                     self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
                     # self.client.send(pickle.dumps(image))
-                    print(f"Send {self._num} images in {time.time() - self._start} s")
+                    debug(f"Send {self._num} images in {time.time() - self._start} s")
                 _ = round(time.time() - start, 2)
                 if _ > 0:
                     time.sleep(_)
@@ -120,13 +120,18 @@ class ScreenManager(Base):
                 # time.sleep(3)
         else:
             while not self.event.is_set():
-                _, image = cap.read()
-                if not _:
-                    break
-                self._num += 1
-                self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
-                # self.client.send(pickle.dumps(image))
-                print(f"Send {self._num} images in {time.time() - self._start} s")
+                start = time.time()
+                for i in range(4):
+                    _, image = cap.read()
+                    if not _:
+                        break
+                    self._num += 1
+                    self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
+                    # self.client.send(pickle.dumps(image))
+                    debug(f"Send {self._num} images in {time.time() - self._start} s")
+                _ = round(time.time() - start, 2)
+                if _ > 0:
+                    time.sleep(_)
 
 
 class ScreenReceiver(Base):

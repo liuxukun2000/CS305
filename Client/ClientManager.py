@@ -425,7 +425,7 @@ class ClientManager:
     def start_screen_manager(self):
         self.__screen_manager = ScreenManager(self.__token, self.__event)
         self.__screen_manager.init_msg = LISTEN(f"{self.__token}_screen")
-        self.__screen_process = Process(target=self.__screen_receiver, args=(self.__screen_video,))
+        self.__screen_process = Process(target=self.__screen_manager.start, args=(self.__screen_video,))
         self.__screen_process.daemon = True
         self.__screen_process.start()
 
