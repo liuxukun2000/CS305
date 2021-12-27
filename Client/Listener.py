@@ -79,7 +79,6 @@ class KeyboardListener:
         self.client = client
         self.statues: List[bool] = [False for i in range(300)]
 
-
     def global_hook(self, key: KeyboardEvent) -> None:
         return self.on_press(key) if key.event_type == 'down' else self.on_release(key)
 

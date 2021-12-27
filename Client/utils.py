@@ -82,6 +82,8 @@ class SimpleManager(Base):
         self.mouse.start()
         self.keyboard.start()
         self.event.wait()
+        keyboard.unhook_all()
+        mouse.unhook_all()
 
 
 class ScreenManager(Base):
@@ -193,9 +195,11 @@ class SimpleReceiver(Base):
 
     def start(self) -> None:
         self.init()
+        keyboard.unhook_all()
+        mouse.unhook_all()
         self.__queue = self.client.queue
         while not self.event.is_set():
-            data = ast.literal_eval(self.__queue.get())
+            data = ast.literal_eval(self.__queue.get().decode('utf-8'))
             if data[0] == 'MOUSE':
                 self.process_mouse(data[1:])
             elif data[0] == 'KEYBOARD':

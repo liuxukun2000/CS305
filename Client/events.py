@@ -71,7 +71,7 @@ class SendEvent(Enum):
 
 def printf(data: Text) -> None:
     os.write(1, bytes(data.encode('utf-8')))
-    os.write(2, bytes(data.encode('utf-8')))
+    # os.write(2, bytes(data.encode('utf-8')))
 
 
 def scanf() -> List[Tuple[Union[ReceiveEvent, None], Any]]:

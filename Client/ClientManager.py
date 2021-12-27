@@ -287,9 +287,15 @@ class ClientManager:
                         self._mode = ClientMode.CONTROLLER
                 else:
                     printf(get_message(SendEvent.EndControl, ()))
+                    self.__event.set()
                     if self.__screen_process:
                         self.__screen_process.terminate()
                         self.__screen_process.kill()
+                    if self.__simple_process:
+                        self.__simple_process.terminate()
+                        self.__simple_process.kill()
+                    keyboard.unhook_all()
+                    mouse.unhook_all()
             elif op[0] == 'MEETING':
                 if self.__token != op[2] or op[3] == self.__self:
                     continue
@@ -438,12 +444,16 @@ class ClientManager:
 
     def listen(self) -> None:
         try:
+            self.reset_control()
+            self.__event = Event()
             self._control_connection.send(str(('control', self.__token)))
             printf(get_message(SendEvent.Okay, ()))
         except Exception:
             return
 
     def control(self, ID: str) -> bool:
+        self.reset_control()
+        self.__event = Event()
         self.__token = ID
         self._control_connection.send(str(('control', self.__token)))
         time.sleep(0.5)
@@ -459,6 +469,7 @@ class ClientManager:
         return True
 
     def join_meeting(self, token: str, password: str, audio: str):
+        self.__event = Event()
         if self.__getting_list:
             self.reset_meeting()
         audio = 1 if audio == 'true' else 0
@@ -639,8 +650,9 @@ class ClientManager:
         printf(get_message(SendEvent.UpdateMessage, (self.__username, msg)))
 
     def stop_control_listen(self):
-        self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
-        printf(get_message(SendEvent.Okay, ()))
+        self.stop_control()
+        # self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
+        # printf(get_message(SendEvent.Okay, ()))
 
     def change_video_out(self, op: str):
         op = not bool(int(op))
@@ -670,6 +682,10 @@ class ClientManager:
         if self.__screen_process:
             self.__screen_process.terminate()
             self.__screen_process.kill()
+        if self.__simple_process:
+            self.__simple_process.terminate()
+            self.__simple_process.kill()
+        self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
         printf(get_message(SendEvent.Okay, ()))
 
 
