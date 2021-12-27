@@ -415,14 +415,14 @@ class ClientManager:
             self.__audio_process_in.kill()
 
     def start_audio_manager(self):
-        self.__audio_manager = AudioManager(self.__token, self.__audio_out_event)
+        self.__audio_manager = AudioManager(self.__token, self.__audio_out_event, self.__self)
         self.__audio_manager.init_msg = LISTEN(f"{self.__token}_audio")
         self.__audio_process_out = get_process(self.__audio_manager)
         self.__audio_process_out.daemon = True
         self.__audio_process_out.start()
 
     def start_audio_listener(self):
-        self.__audio_receiver = AudioReceiver(self.__token, self.__audio_in_event)
+        self.__audio_receiver = AudioReceiver(self.__token, self.__audio_in_event, self.__self)
         self.__audio_receiver.init_msg = CONTROL(f"{self.__token}_audio")
         self.__audio_process_in = get_process(self.__audio_receiver)
         self.__audio_process_in.daemon = True

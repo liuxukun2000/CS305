@@ -211,23 +211,25 @@ def get_process(manager: Base) -> Process:
 
 
 class AudioManager(Base):
-    def __init__(self, ID: str, event: Event) -> None:
+    def __init__(self, ID: str, event: Event, token: str) -> None:
         super(AudioManager, self).__init__(ID, event)
         self.__queue = None
+        self.__token = token
 
     def start(self) -> None:
         self.init()
         while not self.event.is_set():
             myrecording = sd.rec(int(RECORD_SECONDS * RATE), samplerate=RATE, channels=1)
             sd.wait()
-            self.client.send(zlib.compress(pickle.dumps(myrecording), zlib.Z_BEST_COMPRESSION))
+            self.client.send(zlib.compress(pickle.dumps((self.__token, myrecording)), zlib.Z_BEST_COMPRESSION))
 
 
 class AudioReceiver(Base):
-    def __init__(self, ID: str, event: Event, ) -> None:
+    def __init__(self, ID: str, event: Event, token: str) -> None:
         super(AudioReceiver, self).__init__(ID, event)
         self.__queue = None
         self.__threads = 4
+        self.__token = token
 
     @staticmethod
     def play(queue: Queue):
@@ -246,7 +248,8 @@ class AudioReceiver(Base):
         self.__queue = self.client.queue
         tmp = 0
         while not self.event.is_set():
-            data = pickle.loads(zlib.decompress(self.__queue.get()))
-            queues[tmp % self.__threads].put(data)
-            tmp += 1
+            token, data = pickle.loads(zlib.decompress(self.__queue.get()))
+            if token != self.__token:
+                queues[tmp % self.__threads].put(data)
+                tmp += 1
         debug('audio--------------shut------------------down')
