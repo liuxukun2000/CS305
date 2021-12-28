@@ -1,6 +1,7 @@
 import ast
 import asyncio
 import pickle
+import signal
 import sys
 import time
 import zlib
@@ -209,6 +210,18 @@ class SimpleReceiver(Base):
 def get_process(manager: Base) -> Process:
     return Process(target=manager.start)
 
+HANDLED_SIGNALS = (
+    signal.SIGINT,  # Unix signal 2. Sent by Ctrl+C.
+    signal.SIGTERM,  # Unix signal 15. Sent by `kill <pid>`.
+)
+
+
+def signal_handler(a, b):
+    try:
+        sd.stop()
+        debug('audio stop')
+    except Exception:
+        pass
 
 class AudioManager(Base):
     def __init__(self, ID: str, event: Event, token: str) -> None:
@@ -221,7 +234,7 @@ class AudioManager(Base):
         while not self.event.is_set():
             myrecording = sd.rec(int(RECORD_SECONDS * RATE), samplerate=RATE, channels=1)
             sd.wait()
-            self.client.send(zlib.compress(pickle.dumps((self.__token, myrecording)), zlib.Z_BEST_COMPRESSION))
+            self.client.send(zlib.compress(pickle.dumps((self.__token, myrecording)), zlib.Z_BEST_SPEED))
 
 
 class AudioReceiver(Base):
@@ -238,6 +251,8 @@ class AudioReceiver(Base):
             sd.play(data)
 
     def start(self) -> None:
+        for sig in HANDLED_SIGNALS:
+            signal.signal(sig, signal_handler)
         self.init()
         queues: List[Queue] = [Queue() for i in range(self.__threads)]
         pool: List[Thread] = [Thread(target=self.play, args=(queues[i],)) for i in range(self.__threads)]
@@ -252,4 +267,8 @@ class AudioReceiver(Base):
             if token != self.__token:
                 queues[tmp % self.__threads].put(data)
                 tmp += 1
+        sd.stop(ignore_errors=True)
         debug('audio--------------shut------------------down')
+
+
+

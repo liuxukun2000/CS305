@@ -386,8 +386,8 @@ class ClientManager:
                         self.__meeting_list.pop(op[4])
                         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
                     if op[4] == self.__username:
-                        printf(get_message(SendEvent.ForceExit, ('force',)))
                         self.stop()
+                        printf(get_message(SendEvent.ForceExit, ('force',)))
                         return
                 elif op[1] == 'VIDEO':
                     if self.__screen_process:
@@ -403,21 +403,23 @@ class ClientManager:
             else:
                 pass
 
-    def clear_audio(self, out_only: bool = True):
+    def clear_audio(self, out_only: bool = False):
         if self.__audio_process_out:
             self.__audio_out_event.set()
             time.sleep(1)
-            self.__audio_out_event = Event()
             self.__audio_process_out.terminate()
             self.__audio_process_out.kill()
+            self.__audio_process_out.close()
+            self.__audio_out_event = Event()
         if out_only:
             return
         if self.__audio_process_in:
             self.__audio_in_event.set()
             time.sleep(1)
-            self.__audio_in_event = Event()
             self.__audio_process_in.terminate()
             self.__audio_process_in.kill()
+            self.__audio_process_in.close()
+            self.__audio_in_event = Event()
 
     def start_audio_manager(self):
         self.__audio_manager = AudioManager(self.__token, self.__audio_out_event, self.__self)
@@ -475,7 +477,7 @@ class ClientManager:
 
     def join_meeting(self, token: str, password: str, audio: str):
         self.__event = Event()
-        if self.__getting_list:
+        if not self.__getting_list:
             self.reset_meeting()
         audio = 1 if audio == 'true' else 0
         data = dict(token=token, password=password)
@@ -676,7 +678,7 @@ class ClientManager:
         printf(get_message(SendEvent.Okay, ()))
 
     def stop(self):
-        # self.__event.set()
+        self.__event.set()
         if self.__screen_process:
             self.__screen_process.terminate()
             self.__screen_process.kill()
@@ -687,7 +689,7 @@ class ClientManager:
         printf(get_message(SendEvent.Okay, ()))
 
     def stop_control(self):
-        # self.__event.set()
+        self.__event.set()
         if self.__screen_process:
             self.__screen_process.terminate()
             self.__screen_process.kill()
