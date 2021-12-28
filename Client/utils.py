@@ -268,6 +268,11 @@ class AudioReceiver(Base):
                 queues[tmp % self.__threads].put(data)
                 tmp += 1
         sd.stop(ignore_errors=True)
+        for i in pool:
+            try:
+                i._stop()
+            except Exception:
+                pass
         debug('audio--------------shut------------------down')
 
 
