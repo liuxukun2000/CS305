@@ -69,6 +69,7 @@ class ClientManager:
 
         self.__username: str = ""
         self.__token: str = ""
+        self.__token_copy: str = ""
 
     def delay(self) -> int:
         printf(get_message(SendEvent.NetworkDelay, (str(self._control_connection.delay),)))
@@ -86,7 +87,8 @@ class ClientManager:
         printf(get_message(SendEvent.ClientReady, ()))
 
     def token(self) -> None:
-        printf(get_message(SendEvent.Okay, (self.__token,)))
+
+        printf(get_message(SendEvent.Okay, (self.__token_copy,)))
 
     @staticmethod
     def _url(_url: str) -> str:
@@ -169,6 +171,7 @@ class ClientManager:
             self._mode = ClientMode.LOGIN
             self.__username = username
             self.__token = data['token']
+            self.__token_copy = self.__token
             printf(get_message(SendEvent.Okay, ()))
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
@@ -186,6 +189,7 @@ class ClientManager:
             self._mode = ClientMode.LOGIN
             self.__username = username
             self.__token = data['token']
+            self.__token_copy = self.__token
             printf(get_message(SendEvent.Okay, ()))
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
@@ -197,6 +201,7 @@ class ClientManager:
             if data.get('status', 500) != 200:
                 printf(get_message(SendEvent.Failed, ()))
             self.__token = data['token']
+            self.__token_copy = self.__token
             printf(get_message(SendEvent.Okay, (self.__token,)))
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
@@ -352,7 +357,7 @@ class ClientManager:
                         self.__meeting_list[op[5]]['is_owner'] = True
                         if op[5] == self.__username:
                             self.__is_owner = True
-                            printf(get_message(SendEvent.UpdateLevel, (2,)))
+                            printf(get_message(SendEvent.UpdateLevel, ('2',)))
                     printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
                 elif op[1] == 'ADMIN':
                     if self.__meeting_list[op[4]]['is_owner']:
@@ -537,11 +542,15 @@ class ClientManager:
             self._control_connection.send(str(('MEETING', 'VIDEO', self.__token, self.__self, 'DISABLE', name)))
         self._control_connection.send(str(('MEETING', 'LEAVE', self.__token, self.__self, name)))
         time.sleep(1)
-        self.reset_meeting()
-        if self.__screen_process:
-            self.__screen_process.terminate()
-            self.__screen_process.kill()
-        self.clear_audio()
+        if name == self.__username:
+            self.reset_meeting()
+            if self.__screen_process:
+                self.__screen_process.terminate()
+                self.__screen_process.kill()
+            self.clear_audio()
+        else:
+            self.__meeting_list.pop(name)
+            printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_owner(self, new_name: str):
         if not self.__is_owner:

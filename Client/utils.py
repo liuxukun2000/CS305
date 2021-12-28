@@ -235,7 +235,7 @@ class AudioReceiver(Base):
     def play(queue: Queue):
         while True:
             data = queue.get()
-            sd.play(data, RATE)
+            sd.play(data)
 
     def start(self) -> None:
         self.init()
