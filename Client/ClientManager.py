@@ -409,7 +409,7 @@ class ClientManager:
             time.sleep(1)
             self.__audio_process_out.terminate()
             self.__audio_process_out.kill()
-            self.__audio_process_out.close()
+            self.__audio_process_out.join()
             self.__audio_out_event = Event()
         if out_only:
             return
@@ -418,7 +418,7 @@ class ClientManager:
             time.sleep(1)
             self.__audio_process_in.terminate()
             self.__audio_process_in.kill()
-            self.__audio_process_in.close()
+            self.__audio_process_in.join()
             self.__audio_in_event = Event()
 
     def start_audio_manager(self):
@@ -451,7 +451,8 @@ class ClientManager:
 
     def listen(self) -> None:
         try:
-            self.reset_control()
+            self.reset_meeting()
+            self.__token = self.__token_copy
             self.__event = Event()
             self._control_connection.send(str(('control', self.__token)))
             printf(get_message(SendEvent.Okay, ()))
@@ -459,7 +460,7 @@ class ClientManager:
             return
 
     def control(self, ID: str) -> bool:
-        self.reset_control()
+        self.reset_meeting()
         self.__event = Event()
         self.__token = ID
         self._control_connection.send(str(('control', self.__token)))
@@ -693,9 +694,11 @@ class ClientManager:
         if self.__screen_process:
             self.__screen_process.terminate()
             self.__screen_process.kill()
+            self.__screen_process.join()
         if self.__simple_process:
             self.__simple_process.terminate()
             self.__simple_process.kill()
+            self.__simple_process.join()
         try:
             keyboard.unhook_all()
             mouse.unhook_all()
