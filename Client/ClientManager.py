@@ -119,6 +119,7 @@ class ClientManager:
         self.__control_thread.start()
 
     def reset_meeting(self) -> None:
+        self._mode = ClientMode.LOGIN
         self.reset_control()
         self.__getting_list = True
         self.__meeting_list = dict()
@@ -451,6 +452,7 @@ class ClientManager:
 
     def listen(self) -> None:
         try:
+
             self.reset_meeting()
             self.__token = self.__token_copy
             self.__event = Event()
@@ -705,6 +707,7 @@ class ClientManager:
         except Exception:
             pass
         self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
+        self.reset_meeting()
         printf(get_message(SendEvent.Okay, ()))
 
 
