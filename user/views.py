@@ -45,6 +45,7 @@ def change_name(request: HttpRequest):
         if User.objects.filter(username=newname).exists():
             return JsonResponse(dict(status=401))
         User.objects.filter(username=username).update(username=newname)
+        request.session['username'] = newname
         return JsonResponse(dict(status=200))
     return JsonResponse(dict(status=403))
 

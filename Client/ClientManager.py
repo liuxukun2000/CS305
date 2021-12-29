@@ -1,14 +1,4 @@
-import ast
-import os
-import pickle
-import struct
 import sys
-import threading
-import time
-import zlib
-from multiprocessing import Process, Queue
-# from asyncio import Queue
-from enum import Enum, unique
 from typing import Union, ByteString, Text, Tuple, Dict, Callable, Any, List
 import requests
 from utils import *
@@ -20,34 +10,37 @@ URL = "http://oj.sustech.xyz:8000"
 
 class ClientManager:
     def __init__(self) -> None:
-        self.__event = Event()
-        self.__audio_in_event = Event()
-        self.__audio_out_event = Event()
-        self.__simple_manager: Union[SimpleManager, None] = None
-        self.__screen_manager: Union[ScreenManager, None] = None
-        self.__simple_receiver: Union[SimpleReceiver, None] = None
-        self.__screen_receiver: Union[ScreenReceiver, None] = None
-        self.__audio_receiver: Union[AudioReceiver, None] = None
-        self.__audio_manager: Union[AudioManager, None] = None
+        """
+        Client 控制类
+        """
+        self.__event = Event()  # 用于控制进程结束的事件
+        self.__audio_in_event = Event()  # 用于控制进程结束的事件
+        self.__audio_out_event = Event()  # 用于控制进程结束的事件
+        self.__simple_manager: Union[SimpleManager, None] = None  # 控制管理
+        self.__screen_manager: Union[ScreenManager, None] = None  # 屏幕管理
+        self.__simple_receiver: Union[SimpleReceiver, None] = None  # 控制接收
+        self.__screen_receiver: Union[ScreenReceiver, None] = None  # 屏幕接收
+        self.__audio_receiver: Union[AudioReceiver, None] = None  # 音频接收
+        self.__audio_manager: Union[AudioManager, None] = None  # 音频管理
 
         self._mode: ClientMode = ClientMode.INIT
         self._session = requests.Session()
 
-        self._control_connection: Client = Client()
+        self._control_connection: Client = Client()  # 管理连接
         self._control_queue: Queue = self._control_connection.queue
         self._control_connection.run()
-        self.__control_event: Event = Event()
+        self.__control_event: Event = Event()  # 用于控制线程结束的事件
 
-        self.__simple_process: Union[Process, None] = None
-        self.__screen_process: Union[Process, None] = None
-        self.__audio_process_in: Union[Process, None] = None
-        self.__audio_process_out: Union[Process, None] = None
+        self.__simple_process: Union[Process, None] = None  # 控制进程
+        self.__screen_process: Union[Process, None] = None  # 屏幕进程
+        self.__audio_process_in: Union[Process, None] = None  # 音频进程
+        self.__audio_process_out: Union[Process, None] = None  # 音频进程
 
-        self.__control_thread: Union[Thread, None] = Thread(target=self.control_FSA)
+        self.__control_thread: Union[Thread, None] = Thread(target=self.control_FSA)  # 控制线程
         self.__control_thread.setDaemon(True)
         self.__control_thread.start()
 
-        self.__self = str(time.time_ns())
+        self.__self = str(time.time_ns())  # 唯一ID,用于区分消息来源
 
         self.__audio_status: int = 0  # -1 force 0 disable 1 enable
         self.__video_status: int = 0  # 0 down 1 up
@@ -60,26 +53,37 @@ class ClientManager:
         self.__check: int = 0
 
         self.__getting_list: bool = True
-        self.__tmp_list: str = ''
 
-        self.__meeting_list: Dict[str, Dict[str, Any]] = dict()
+        self.__meeting_list: Dict[str, Dict[str, Any]] = dict()  # 会议成员信息
         """
         is_admin, is_owner, video, audio
         """
 
-        self.__username: str = ""
+        self.__username: str = ""  # 用户名
         self.__token: str = ""
         self.__token_copy: str = ""
 
     def delay(self) -> int:
+        """
+        获取服务器延时
+        :return:
+        """
         printf(get_message(SendEvent.NetworkDelay, (str(self._control_connection.delay),)))
         return self._control_connection.delay
 
-    def display_name(self):
+    def display_name(self) -> str:
+        """
+        获取用户名
+        :return:
+        """
         printf(get_message(SendEvent.DisplayName, (self.__username,)))
         return self.__username
 
-    def logout(self):
+    def logout(self) -> None:
+        """
+        登出
+        :return:
+        """
         printf(get_message(SendEvent.Okay, ()))
         self._mode = ClientMode.INIT
 
@@ -87,7 +91,10 @@ class ClientManager:
         printf(get_message(SendEvent.ClientReady, ()))
 
     def token(self) -> None:
-
+        """
+        获取token
+        :return:
+        """
         printf(get_message(SendEvent.Okay, (self.__token_copy,)))
 
     @staticmethod
@@ -103,6 +110,10 @@ class ClientManager:
         return Client()
 
     def reset_control(self) -> None:
+        """
+        重置控制线程与连接
+        :return:
+        """
         self.__control_event.set()
         time.sleep(1)
         try:
@@ -119,6 +130,10 @@ class ClientManager:
         self.__control_thread.start()
 
     def reset_meeting(self) -> None:
+        """
+        清空会议信息并重置控制连接
+        :return:
+        """
         self._mode = ClientMode.LOGIN
         self.reset_control()
         self.__getting_list = True
@@ -132,6 +147,11 @@ class ClientManager:
         self.__checking_user = ''
 
     def change_name(self, username) -> None:
+        """
+        更改用户名
+        :param username:
+        :return:
+        """
         data = dict(
             newname=username
         )
@@ -141,15 +161,17 @@ class ClientManager:
             if data.get('status', 500) != 200:
                 printf(get_message(SendEvent.Failed, ()))
             self.__username = username
-
             printf(get_message(SendEvent.Okay, ()))
         except Exception:
             printf(get_message(SendEvent.Failed, ()))
 
     def change_password(self, password: str) -> None:
-        data = dict(
-            password=password
-        )
+        """
+        更改密码
+        :param password:
+        :return:
+        """
+        data = dict(password=password)
         try:
             response = self._session.post(url=self._url('/changepwd/'), data=data)
             data = response.json()
@@ -160,54 +182,69 @@ class ClientManager:
             printf(get_message(SendEvent.Failed, ()))
 
     def register(self, username: str, password: str) -> None:
-        data = dict(
-            username=username,
-            password=password
-        )
+        """
+        注册用户
+        :param username:
+        :param password:
+        :return:
+        """
+        data = dict(username=username, password=password)
         try:
             response = self._session.post(url=self._url('/register/'), data=data)
             data = response.json()
             if data.get('status', 500) != 200:
-                printf(get_message(SendEvent.Failed, ()))
+                printf(get_message(SendEvent.Failed, ("用户已存在",)))
             self._mode = ClientMode.LOGIN
             self.__username = username
             self.__token = data['token']
             self.__token_copy = self.__token
             printf(get_message(SendEvent.Okay, ()))
         except Exception:
-            printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Failed, ("服务器错误",)))
 
     def login(self, username: str, password: str) -> None:
-        data = dict(
-            username=username,
-            password=password
-        )
+        """
+        用户登陆
+        :param username:
+        :param password:
+        :return:
+        """
+        data = dict(username=username, password=password)
         try:
             response = self._session.post(url=self._url('/login/'), data=data)
             data = response.json()
             if data.get('status', 500) != 200:
-                printf(get_message(SendEvent.Failed, ()))
+                printf(get_message(SendEvent.Failed, ("密码错误",)))
             self._mode = ClientMode.LOGIN
             self.__username = username
             self.__token = data['token']
             self.__token_copy = self.__token
             printf(get_message(SendEvent.Okay, ()))
         except Exception:
-            printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Failed, ("服务器错误",)))
 
     def change_token(self) -> None:
+        """
+        更改用户token
+        :return:
+        """
         try:
             response = self._session.post(url=self._url('/changetoken/'))
             data = response.json()
             if data.get('status', 500) != 200:
-                printf(get_message(SendEvent.Failed, ()))
+                printf(get_message(SendEvent.Failed, ("服务器错误",)))
             self.__token = data['token']
             self.__token_copy = self.__token
             printf(get_message(SendEvent.Okay, (self.__token,)))
         except Exception:
-            printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Failed, ("服务器错误",)))
 
     def create_meeting(self, password) -> None:
+        """
+        创建会议
+        :param password:
+        :return:
+        """
         try:
             token = str(time.time_ns())[-9:]
             self.__token = token
@@ -215,14 +252,20 @@ class ClientManager:
             response = self._session.post(url=self._url('/createmeeting/'), data=data)
             data = response.json()
             if data.get('status', 500) != 200:
-                printf(get_message(SendEvent.Failed, ()))
+                printf(get_message(SendEvent.Failed, ("服务器错误",)))
             self.__token = token
             printf(get_message(SendEvent.Okay, (self.__token,)))
         except Exception:
-            printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Failed, ("服务器错误",)))
 
     @staticmethod
     def get_level(owner: bool, admin: bool) -> int:
+        """
+        获取用户等级
+        :param owner:
+        :param admin:
+        :return:
+        """
         if owner:
             return 2
         if admin:
@@ -235,6 +278,7 @@ class ClientManager:
 
     def control_FSA(self):
         """
+        控制信号自动机
         CONTROL : START/STOP : DO/DONE : token : uuid
 
         MEETING: AUDIO : token : uuid : DISABLE/ENABLE : username
@@ -254,15 +298,15 @@ class ClientManager:
             if self._control_connection.queue.empty():
                 time.sleep(1)
                 continue
-            op: bytes = self._control_connection.queue.get()
-            op: Sequence[Union[str, Union[int, dict]]] = ast.literal_eval(op.decode('utf-8'))
+            op: bytes = self._control_connection.queue.get()  # 获取消息
+            op: Sequence[Union[str, Union[int, dict]]] = ast.literal_eval(op.decode('utf-8'))  # 消息解码
             debug('control receive-----------------' + str(op))
             if op[0] == 'CONTROL':
                 if self.__token != op[3] or op[4] == self.__self:
                     continue
                 if op[1] == 'START':
                     if op[2] == 'DO':
-                        if self.__screen_process:
+                        if self.__screen_process:  # 清空已有的进程
                             self.__screen_process.kill()
                         self.__screen_manager = ScreenManager(self.__token, self.__event)
                         self.__simple_receiver = SimpleReceiver(self.__token, self.__event)
@@ -272,13 +316,13 @@ class ClientManager:
                         self.__simple_process = get_process(self.__simple_receiver)
                         self.__screen_process.daemon = True
                         self.__simple_process.daemon = True
-                        self.__simple_process.start()
-                        self.__screen_process.start()
+                        self.__simple_process.start()  # 开启控制进程
+                        self.__screen_process.start()  # 开启屏幕进程
                         self._control_connection.send(str(('CONTROL', 'START', 'DONE', self.__token, self.__self)))
                         printf(get_message(SendEvent.StartControl, ()))
                         self._mode = ClientMode.LISTENER
                     else:
-                        if self.__screen_process:
+                        if self.__screen_process: # 清空已有的进程
                             self.__screen_process.kill()
                         self.__screen_receiver = ScreenReceiver(self.__token, self.__event)
                         self.__simple_manager = SimpleManager(self.__token, self.__event)
@@ -340,7 +384,6 @@ class ClientManager:
                             printf(get_message(SendEvent.UpdateAudio, (str(max(self.__audio_status, 0)),)))
                         else:
                             self.__meeting_list[op[5]]['audio'] = 1
-                            # self.start_audio_manager()
                     else:
                         if op[5] == self.__username:
                             if self.__audio_status == -1:
@@ -405,6 +448,11 @@ class ClientManager:
                 pass
 
     def clear_audio(self, out_only: bool = False):
+        """
+        清空音频输入
+        :param out_only:
+        :return:
+        """
         if self.__audio_process_out:
             self.__audio_out_event.set()
             time.sleep(1)
@@ -423,6 +471,10 @@ class ClientManager:
             self.__audio_in_event = Event()
 
     def start_audio_manager(self):
+        """
+        开启音频进程
+        :return:
+        """
         self.__audio_manager = AudioManager(self.__token, self.__audio_out_event, self.__self)
         self.__audio_manager.init_msg = LISTEN(f"{self.__token}_audio")
         self.__audio_process_out = get_process(self.__audio_manager)
@@ -430,6 +482,10 @@ class ClientManager:
         self.__audio_process_out.start()
 
     def start_audio_listener(self):
+        """
+        开启音频进程
+        :return:
+        """
         self.__audio_receiver = AudioReceiver(self.__token, self.__audio_in_event, self.__self)
         self.__audio_receiver.init_msg = CONTROL(f"{self.__token}_audio")
         self.__audio_process_in = get_process(self.__audio_receiver)
@@ -437,6 +493,10 @@ class ClientManager:
         self.__audio_process_in.start()
 
     def start_screen_manager(self):
+        """
+        开启屏幕进程
+        :return:
+        """
         self.__screen_manager = ScreenManager(self.__token, self.__event)
         self.__screen_manager.init_msg = LISTEN(f"{self.__token}_screen")
         self.__screen_process = Process(target=self.__screen_manager.start, args=(self.__screen_video,))
@@ -444,6 +504,10 @@ class ClientManager:
         self.__screen_process.start()
 
     def start_screen_listener(self):
+        """
+        开启屏幕进程
+        :return:
+        """
         self.__screen_receiver = ScreenReceiver(self.__token, self.__event)
         self.__screen_receiver.init_msg = CONTROL(f"{self.__token}_screen")
         self.__screen_process = get_process(self.__screen_receiver)
@@ -451,6 +515,10 @@ class ClientManager:
         self.__screen_process.start()
 
     def listen(self) -> None:
+        """
+        监听
+        :return:
+        """
         try:
 
             self.reset_meeting()
@@ -462,6 +530,11 @@ class ClientManager:
             return
 
     def control(self, ID: str) -> bool:
+        """
+        控制
+        :param ID:
+        :return:
+        """
         self.reset_meeting()
         self.__event = Event()
         self.__token = ID
@@ -475,10 +548,17 @@ class ClientManager:
         if self._mode == ClientMode.CONTROLLER:
             printf(get_message(SendEvent.Okay, ()))
         else:
-            printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Failed, ("状态不匹配",)))
         return True
 
     def join_meeting(self, token: str, password: str, audio: str):
+        """
+        加入会议
+        :param token:
+        :param password:
+        :param audio:
+        :return:
+        """
         self.__event = Event()
         if not self.__getting_list:
             self.reset_meeting()
@@ -487,7 +567,7 @@ class ClientManager:
         response = self._session.post(url=self._url('/checkmeeting/'), data=data)
         data = response.json()
         if data.get('status', 500) != 200:
-            printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Failed, ("Server Error",)))
             return
         self.__token = token
         self.__is_owner = data.get('is_owner', False)
@@ -503,7 +583,7 @@ class ClientManager:
                 break
         if not self.__is_owner:
             if self.__getting_list:
-                printf(get_message(SendEvent.Failed, ()))
+                printf(get_message(SendEvent.Failed, ("403",)))
                 return
         self.__getting_list = False
         self.__meeting_list[self.__username] = dict(
@@ -531,16 +611,21 @@ class ClientManager:
             printf(get_message(SendEvent.UpdateShare, (self.__video_sharer,)))
 
     def leave_meeting(self, name: str):
+        """
+        离开会议
+        :param name:
+        :return:
+        """
         if name != self.__username:
             if not self.__is_owner and not self.__is_admin:
-                printf(get_message(SendEvent.Failed, ()))
+                printf(get_message(SendEvent.Failed, ("403",)))
                 return
         if self.__is_owner and name == self.__username:
             data = dict(token=self.__token)
             response = self._session.post(url=self._url('/deletemeeting/'), data=data)
             data = response.json()
             if data.get('status', 500) != 200:
-                printf(get_message(SendEvent.Failed, ()))
+                printf(get_message(SendEvent.Failed, ("Server error",)))
                 return
         printf(get_message(SendEvent.Okay, ()))
         if self.__meeting_list[name]['video']:
@@ -558,13 +643,18 @@ class ClientManager:
             printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_owner(self, new_name: str):
+        """
+        更改会议主持人
+        :param new_name:
+        :return:
+        """
         if not self.__is_owner:
-            printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Failed, ("403",)))
         data = dict(token=self.__token, username=new_name)
         response = self._session.post(url=self._url('/changeowner/'), data=data)
         data = response.json()
         if data.get('status', 500) != 200:
-            printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Failed, ("Server error")))
             return
 
         self._control_connection.send(str(('MEETING', 'OWNER', self.__token, self.__self, self.__username, new_name)))
@@ -577,8 +667,13 @@ class ClientManager:
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_admin(self, name: str):
+        """
+        更改管理员
+        :param name:
+        :return:
+        """
         if not self.__is_owner:
-            printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Failed, ("403",)))
         self._control_connection.send(
             str(('MEETING', 'ADMIN', self.__token, self.__self, self.__username, name)))
         self.__meeting_list[name]['is_admin'] = not self.__meeting_list[name]['is_admin']
@@ -586,6 +681,12 @@ class ClientManager:
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_audio(self, name: str, others: str = 'false'):
+        """
+        更改音频状态
+        :param name:
+        :param others:
+        :return:
+        """
         op = 0
         others = False if others == 'false' else True
         if name == self.__username:
@@ -604,7 +705,7 @@ class ClientManager:
                 else:
                     op = 2
             else:
-                printf(get_message(SendEvent.Failed, ()))
+                printf(get_message(SendEvent.Failed, ("403",)))
                 return
         if op == 1:
             self._control_connection.send(
@@ -624,12 +725,14 @@ class ClientManager:
         printf(get_message(SendEvent.UpdateMembers, (self.get_member(),)))
 
     def change_video(self):
+        """
+        更改视频状态
+        :return:
+        """
         if self.__video_status == 1:
             self._control_connection.send(
                 str(('MEETING', 'VIDEO', self.__token, self.__self, 'DISABLE', self.__username)))
             self.__video_status = 0
-            # self.__screen_process.terminate()
-            # self.__screen_process.kill()
             printf(get_message(SendEvent.Okay, ()))
             printf(get_message(SendEvent.UpdateShare, ('',)))
             self.__meeting_list[self.__username]['video'] = self.__video_status
@@ -644,7 +747,7 @@ class ClientManager:
                 op = False
                 break
         if not op:
-            printf(get_message(SendEvent.Failed, ()))
+            printf(get_message(SendEvent.Failed, ("已经有人在分享",)))
             return
         self.__video_status = 1
         self._control_connection.send(
@@ -658,6 +761,11 @@ class ClientManager:
         printf(get_message(SendEvent.UpdateShare, (self.__username,)))
 
     def send_message(self, msg: str):
+        """
+        发送信息
+        :param msg:
+        :return:
+        """
         self._control_connection.send(
             str(('MEETING', 'MESSAGE', self.__token, self.__self, msg, self.__username)))
         printf(get_message(SendEvent.Okay, ()))
@@ -665,8 +773,6 @@ class ClientManager:
 
     def stop_control_listen(self):
         self.stop_control()
-        # self._control_connection.send(str(('CONTROL', 'STOP', 'DO', self.__token, self.__self)))
-        # printf(get_message(SendEvent.Okay, ()))
 
     def change_video_out(self, op: str):
         op = not bool(int(op))
@@ -756,40 +862,14 @@ if __name__ == '__main__':
         ReceiveEvent.SwitchVideo: manager.change_video_out
     }
     while True:
-        ans = scanf()
-        # os.write(2, b'rec')
-        for event, data in ans:
-            if not event:
-                continue
-            debug(event.value + '\n')
-            FUNCTIONHASH[event](*data)
-            debug('\n')
-            if event == ReceiveEvent.ConfirmExit:
-                printf(get_message(SendEvent.Okay, ()))
-                sys.exit(0)
-        # os.write(2, b'done')
-    #
-    #
-    #
-    # # op = input()
-    # # printf('client-ready')
-    # # op = input()
-    # y = ClientManager()
-    # x = ClientManager()
-    # # getattr(y, '_simple_connection')
-    #
-    # y.login('1', '1')
-    # x.login('1', '1')
-    # y.control('1')
-    #
-    # x.listen()
-    #
-    # print('inp')
-    # c = input()
-    # print('stop')
-    # x.stop()
-    # y.stop()
-    # sys.exit(0)
-    #
-    # # x.stop()
-    # # print('1111111111111111111111')
+        try:
+            ans = scanf()
+            for event, data in ans:
+                if not event:
+                    continue
+                FUNCTIONHASH[event](*data)
+                if event == ReceiveEvent.ConfirmExit:
+                    printf(get_message(SendEvent.Okay, ()))
+                    sys.exit(0)
+        except Exception:
+            pass

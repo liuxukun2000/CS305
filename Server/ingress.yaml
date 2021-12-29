@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jcoder-ingress
+  annotations:
+    # nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  rules:
+    - host: oj.sustech.xyz
+      http:
+        paths:
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: server
+                port:
+                  number: 80

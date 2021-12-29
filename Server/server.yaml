@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: server
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: server
+        tier: backend
+    spec:
+      containers:
+      - name: server
+        image: "server"
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "3Gi"
+            cpu: "2"

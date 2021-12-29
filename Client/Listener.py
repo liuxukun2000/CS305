@@ -28,80 +28,137 @@ RECORD_SECONDS = 0.5
 
 class MouseListener:
     def __init__(self, client: Client, interval: float = 0.05) -> None:
+        """
+        鼠标移动的监听类
+
+        :param client:
+        :param interval:
+        """
         assert 0.001 <= interval <= 1, "0.001 <= interval <= 1"
         self._status: Dict[str, str] = dict(
             left="down",
             right="down",
             middle="down"
         )
-        self.size = pyautogui.size()
-        self.interval: float = interval
+        self.size = pyautogui.size()  # 获取屏幕大小，便于映射
+        self.interval: float = interval  # 采样间隔
         self._last_record: float = time.time()
         self.client = client
 
     def on_click(self, e: ButtonEvent) -> None:
-        if self._status[e.button] == e.event_type:
+        """
+        点击触发函数
+        :param e:
+        :return:
+        """
+        if self._status[e.button] == e.event_type:  # 数据缓冲
             return
         self._status[e.button] = e.event_type
         self.client.send(str(("MOUSE", "BUTTON", e.button, e.event_type)))
 
     def on_wheel(self, e: WheelEvent) -> None:
+        """
+        滚动触发函数
+        :param e:
+        :return:
+        """
         self.client.send(str(("MOUSE", "WHEEL", e.delta)))
 
     def on_move(self, e: MoveEvent) -> None:
-        # print(map(lambda x, y: int(x * y), (e.x, e.y), self._rate))
+        """
+        移动触发函数
+        :param e:
+        :return:
+        """
         self.client.send(str(("MOUSE", "MOVE", *tuple(map(lambda x, y: (x / y), (e.x, e.y), self.size)))))
 
     def global_hook(self, e) -> None:
+        """
+        全局钩子函数
+        :param e:
+        :return:
+        """
         if isinstance(e, MoveEvent):
-            if time.time() - self._last_record >= self.interval:
+            if time.time() - self._last_record >= self.interval:  # 保证采样率
                 self._last_record = time.time()
                 self.on_move(e)
-        elif isinstance(e, WheelEvent):
+        elif isinstance(e, WheelEvent):  # 根据事件选择函数
             self.on_wheel(e)
         else:
             self.on_click(e)
 
     @property
     def position(self) -> Tuple[int, int]:
+        """
+        获取鼠标位置
+        :return:
+        """
         return mouse.get_position()
 
     def start(self):
+        """
+        设置鼠标的全局钩子
+        :return:
+        """
         mouse.hook(self.global_hook)
 
     @staticmethod
     def stop():
+        """
+        停止监听
+        :return:
+        """
         mouse.unhook_all()
 
 
 class KeyboardListener:
     def __init__(self, client: Client) -> None:
+        """
+        键盘监听器类
+        :param client:
+        """
         self.client = client
         self.statues: List[bool] = [False for i in range(300)]
 
     def global_hook(self, key: KeyboardEvent) -> None:
+        """
+        全局钩子
+        :param key:
+        :return:
+        """
         return self.on_press(key) if key.event_type == 'down' else self.on_release(key)
 
     def on_press(self, key: KeyboardEvent) -> None:
-        # print('press', key.scan_code, self.statues[key.scan_code])
-        if self.statues[key.scan_code]:
+        """
+        按压触发器
+        :param key:
+        :return:
+        """
+        if self.statues[key.scan_code]:  # 缓存，防止持续按压
             return
         self.statues[key.scan_code] = True
         self.client.send(str(("KEYBOARD", key.scan_code, True)))
 
     def on_release(self, key: KeyboardEvent) -> None:
-        # print('release', key.scan_code, self.statues[key.scan_code])
-        if not self.statues[key.scan_code]:
-            print('not', key.scan_code)
+        """
+        释放触发器
+        :param key:
+        :return:
+        """
+        if not self.statues[key.scan_code]:  # 缓存，防止持续按压
             return
         self.statues[key.scan_code] = False
         self.client.send(str(("KEYBOARD", key.scan_code, False)))
 
     def start(self):
+        """
+        设置全局钩子
+        :return:
+        """
         keyboard.unhook_all()
-        keyboard.block_key(272)
-        keyboard.block_key(273)
-        keyboard.block_key(274)
+        keyboard.block_key(272)  # 不监听鼠标左键点击
+        keyboard.block_key(273)  # 右键
+        keyboard.block_key(274)  # 中键
         keyboard.hook(self.global_hook)
 
     @staticmethod

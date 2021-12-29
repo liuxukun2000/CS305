@@ -2,16 +2,14 @@ import ast
 import asyncio
 import pickle
 import signal
-import sys
 import time
 import zlib
 from multiprocessing import Process, Event, Queue
 from threading import Thread
 import base64
 from typing import Union, Sequence
-from io import BytesIO
 import sounddevice as sd
-from PIL import ImageEnhance, Image
+from PIL import Image
 import keyboard
 import pyautogui
 import mouse
@@ -105,20 +103,18 @@ class ScreenManager(Base):
         if screen or not op:
             while not self.event.is_set():
                 start = time.time()
-
                 image = ImageGrab.grab()
                 image = cv2.cvtColor(numpy.asarray(image.resize((1920, 1080), Image.ANTIALIAS)), cv2.COLOR_RGB2BGR)
-                # image = cv2.resize(cv2.cvtColor(numpy.asarray(ImageGrab.grab()), cv2.COLOR_RGB2BGR), (self.__x, self.__y))
                 self._num += 1
-                # self.client.send(zlib.compress(cv2.imencode('.jpeg', image)[1], zlib.Z_BEST_COMPRESSION))
                 self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
-                # self.client.send(pickle.dumps(image))
                 debug(f"Send {self._num} images in {time.time() - self._start} s")
                 _ = round(0.25 - time.time() + start, 2)
                 if _ > 0:
                     time.sleep(_)
-                # time.sleep(3)
         else:
+            """
+            开始使用摄像头
+            """
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 360)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
             while not self.event.is_set():
@@ -128,7 +124,6 @@ class ScreenManager(Base):
                     break
                 self._num += 1
                 self.client.send(zlib.compress(pickle.dumps(image), zlib.Z_BEST_COMPRESSION))
-                # self.client.send(pickle.dumps(image))
                 debug(f"Send {self._num} images in {time.time() - self._start} s")
                 _ = round(0.2 - time.time() + start, 2)
                 if _ > 0:
@@ -151,26 +146,14 @@ class ScreenReceiver(Base):
         self.__queue = self.client.queue
         while not self.event.is_set():
             image = zlib.decompress(self.__queue.get())
-            # image = self.__queue.get()
             if self.__queue.qsize() >= 12:
                 _ = self.__queue.get()
                 continue
-            # print('receive image')
             self._num += 1
             image = cv2.resize(pickle.loads(image), (self.__x, self.__y))
-            if self._num % 50 == 0:
-                cv2.imwrite(f"{self._num}.jpg", image)
             image = cv2.imencode('.jpg', image)[1].tostring()
-            debug('recive')
-            # image = cv2.resize(cv2.imdecode(image, 1), (self.__x, self.__y))
-            # printf(get_message(SendEvent.ScreenImage, (str(base64.b64encode(image)), str(self.client.delay))))
             os.write(1, b'screen-image||||' + base64.b64encode(image) + b'||||' +
                      bytes(str(self.client.delay).encode('utf-8')) + b'@@@@')
-            # sys.stdout.flush()
-
-            # with open(f"{self._num}.txt", 'w') as f:
-            #     f.write(get_message(SendEvent.ScreenImage, (str(base64.b64encode(image)),)))
-
             debug(f"Receive {self._num} images in {time.time() - self._start} s")
         printf(get_message(SendEvent.EndControl, ()))
         debug('image--------------shut------------------down')

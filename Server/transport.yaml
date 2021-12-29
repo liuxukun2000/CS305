@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-leader
+  labels:
+    app: redis
+    role: leader
+    tier: backend
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    app: redis
+    role: leader
+    tier: backend
+ ---
+ apiVersion: v1
+ kind: Service
+ metadata:
+   name: redis-follower
+   role: follower
+   tier: backend
+ spec:
+   ports:
+   - port: 6379
+   selector:
+     app: redis
+     role: follower
+     tier: backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-leader
+  labels:
+    app: redis
+    role: leader
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        role: leader
+        tier: backend
+    spec:
+      containers:
+      - name: redis-leader
+        image: "docker.io/redis"
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+        ports:
+        - containerPort: 6379
+ ---
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: redis-follower
+   labels:
+     app: redis
+     role: follower
+     tier: backend
+ spec:
+   replicas: 2
+   selector:
+     matchLabels:
+       app: redis
+   template:
+     metadata:
+       labels:
+         app: redis
+         role: follower
+         tier: backend
+     spec:
+       containers:
+       - name: redis-follower
+         image: "docker.io/redis"
+         resources:
+           limits:
+             memory: "5Gi"
+             cpu: "2"
+         ports:
+         - containerPort: 6379

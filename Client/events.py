@@ -11,6 +11,9 @@ def debug(x: str):
 
 @unique
 class ReceiveEvent(Enum):
+    """
+    GUI发送的指令
+    """
     DisplayReady = 'display-ready'
     UserLogin = 'user-login'
     UserRegister = 'user-register'
@@ -46,6 +49,9 @@ class ReceiveEvent(Enum):
 
 @unique
 class SendEvent(Enum):
+    """
+    Client发送给GUI的指令
+    """
     ClientReady = 'client-ready'
     ClientMessage = 'client-message'
     NetworkDelay = 'network-delay'
@@ -70,22 +76,30 @@ class SendEvent(Enum):
 
 
 def printf(data: Text) -> None:
+    """
+    向GUI发消息
+    :param data:
+    :return:
+    """
     os.write(1, bytes(data.encode('utf-8')))
-    # os.write(2, bytes(data.encode('utf-8')))
 
 
 def scanf() -> List[Tuple[Union[ReceiveEvent, None], Any]]:
+    """
+    接收GUI的消息并进行拆分
+    :return:
+    """
     ans: List[Tuple[Union[ReceiveEvent, None], Any]] = []
     try:
         global buf
         data = os.read(0, 4096).decode('utf-8').strip()
         buf += data
         while True:
-            pos = buf.find('@@@@')
+            pos = buf.find('@@@@')  # @@@@ 用于分隔指令
             if pos == -1:
                 return ans
             else:
-                tmp = buf[: pos].split('||||')
+                tmp = buf[: pos].split('||||')  # ||||用于分隔参数
                 buf = buf[pos + 4:]
                 try:
                     ans.append((ReceiveEvent(tmp[0]), tmp[1:]))

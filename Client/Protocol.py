@@ -1,23 +1,28 @@
 import asyncio
-import time
-from multiprocessing import Queue
+import ipaddress
 import socket
 import sys
-from typing import cast, Optional, Callable, Union, Dict, List
-from aioquic.asyncio import connect, QuicConnectionProtocol
+import threading
+import time
+from multiprocessing import Queue
+from typing import cast, Optional, Callable, Union, List
+
+from aioquic.asyncio import QuicConnectionProtocol
 from aioquic.asyncio.protocol import QuicStreamHandler
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import QuicConnection
 from aioquic.quic.events import QuicEvent, StreamDataReceived, ConnectionTerminated
 from aioquic.tls import SessionTicketHandler
-# import nest_asyncio
-# nest_asyncio.apply()
+
 from Config import ClientConfig
-import threading
-import ipaddress
 
 
 def start_loop(loop: asyncio.BaseEventLoop):
+    """
+    保持事件循环一直运行
+    :param loop:
+    :return:
+    """
     asyncio.set_event_loop(loop)
     loop.run_forever()
 
@@ -25,6 +30,11 @@ def start_loop(loop: asyncio.BaseEventLoop):
 class ClientProtocol(QuicConnectionProtocol):
 
     def __init__(self, *args, **kwargs):
+        """
+        Client端的协议类
+        :param args:
+        :param kwargs:
+        """
         self._connect = False
         self.__queue = None
         self._cache: List[bytes] = [b'' for i in range(256)]
@@ -38,6 +48,11 @@ class ClientProtocol(QuicConnectionProtocol):
         self._connect = True
 
     async def send(self, data: str) -> None:
+        """
+        发送数据
+        :param data:
+        :return:
+        """
         stream_id = self._quic.get_next_available_stream_id()
         self._quic.send_stream_data(stream_id, bytes(data.encode('utf-8')) if isinstance(data, str) else data, True)
         self.transmit()
@@ -48,6 +63,11 @@ class ClientProtocol(QuicConnectionProtocol):
         return self._connect
 
     def quic_event_received(self, event: QuicEvent):
+        """
+        详情请见服务器协议实现
+        :param event:
+        :return:
+        """
         if isinstance(event, StreamDataReceived):
             _id = event.stream_id % 256
             if not event.end_stream:
@@ -62,6 +82,11 @@ class ClientProtocol(QuicConnectionProtocol):
 
 class Client:
     def __init__(self, host: str = "oj.sustech.xyz", port: int = 8080) -> None:
+        """
+        对于客户端协议的二次封装
+        :param host:
+        :param port:
+        """
         self.loop = asyncio.new_event_loop()
         self._connect: ClientProtocol = cast(ClientProtocol, self.loop.run_until_complete(
             self.connect(
@@ -70,15 +95,15 @@ class Client:
                 configuration=ClientConfig(),
                 create_protocol=ClientProtocol
             )
-        ))
+        ))  # 强制类型转换
         self.__host = host
         self.__port = port
         self._signal = None
         self.size = 0
         self.t = threading.Thread(target=start_loop, args=(self.loop,))
-        self.t.setDaemon(True)
+        self.t.setDaemon(True)  # 设置事件循环线程的守护标志
         self.t.start()
-        self.queue = Queue(maxsize=128)
+        self.queue = Queue(maxsize=128)  # 设置接收队列
         self._connect.set_queue(self.queue)
         self.__ping = True
         self.__delay = 0
@@ -97,6 +122,19 @@ class Client:
                       stream_handler: Optional[QuicStreamHandler] = None,
                       wait_connected: bool = True,
                       local_port: int = 0, ):
+
+        """
+        连接服务器
+        :param host:
+        :param port:
+        :param configuration:
+        :param create_protocol:
+        :param session_ticket_handler:
+        :param stream_handler:
+        :param wait_connected:
+        :param local_port:
+        :return:
+        """
         loop = asyncio.get_event_loop()
         local_host = "::"
         try:
@@ -145,6 +183,10 @@ class Client:
             print(e)
 
     async def ping(self):
+        """
+        获取与服务器连接的延时
+        :return:
+        """
         while self.__ping:
             start = time.time_ns()
             await self._connect.ping()
@@ -160,6 +202,10 @@ class Client:
         return self._connect.connected
 
     def reconnect(self) -> None:
+        """
+        断线重连的应用层实现
+        :return:
+        """
         self.__ping = False
         time.sleep(2)
         self._connect = cast(ClientProtocol, self.loop.run_until_complete(
